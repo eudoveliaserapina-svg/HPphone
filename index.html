@@ -7,14 +7,996 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="霍格沃茨小手机">
 <title>霍格沃茨小手机</title>
-<link rel="stylesheet" href="style.css">
+<style>
+/* ===== 五套主题(米白暖黄为万用) ===== */
+:root, [data-theme="common"] {
+  --bg:#eadfc3; --surface:#f6eed8; --surface2:#ddcfa8; --accent:#d9a72e; --on-accent:#3a2a12;
+  --ink:#3a2c1a; --soft:#7d6c53; --line:#cdbb8c; --bar:#e3d6b4; --bar-ink:#3a2c1a;
+  --lock:#e9dec2; --lock-ink:#3a2c1a; --today:#c0392b;
+  --t0:#1f3a2e; --t1:#6b1f26; --t2:#e6d8b8; --t3:#1c2a3a; --glyph:#d9b768; --glyph2:#4a3a22;
+}
+[data-theme="hufflepuff"] {
+  --bg:#fbeaa8; --surface:#fff6d0; --surface2:#f3d96e; --accent:#f5c400; --on-accent:#3b2412;
+  --ink:#4a2f17; --soft:#86683f; --line:#e1c15a; --bar:#5a3a1c; --bar-ink:#ffe680;
+  --lock:#f6dc7a; --lock-ink:#4a2f17; --today:#a8561a;
+  --t0:#5a3a1c; --t1:#8a5a1f; --t2:#fff0b0; --t3:#3b2412; --glyph:#ffd84a; --glyph2:#4a2f17;
+}
+[data-theme="slytherin"] {
+  --bg:#16322a; --surface:#1f4538; --surface2:#2a5646; --accent:#c9a94d; --on-accent:#1a2b22;
+  --ink:#eadfb8; --soft:#a9b79a; --line:#36614f; --bar:#0f261f; --bar-ink:#d8c27a;
+  --lock:#0f261f; --lock-ink:#d8c27a; --today:#c9a94d;
+  --t0:#0f261f; --t1:#2a5646; --t2:#cfd8b0; --t3:#1b3a2f; --glyph:#d8c27a; --glyph2:#16322a;
+}
+[data-theme="gryffindor"] {
+  --bg:#f3dcb4; --surface:#fcecd0; --surface2:#e9c98f; --accent:#f2c230; --on-accent:#4a0f12;
+  --ink:#3d1a14; --soft:#8a5a48; --line:#d9b078; --bar:#8e1b22; --bar-ink:#ffe08a;
+  --lock:#7a1219; --lock-ink:#ffd966; --today:#8e1b22;
+  --t0:#8e1b22; --t1:#5e0f15; --t2:#f6e0b0; --t3:#3d1a14; --glyph:#ffd966; --glyph2:#5e0f15;
+}
+[data-theme="ravenclaw"] {
+  --bg:#dde3ee; --surface:#f0f3f9; --surface2:#c4cde0; --accent:#9fb3d6; --on-accent:#14264a;
+  --ink:#1d2a44; --soft:#66738c; --line:#aeb9cf; --bar:#1c3566; --bar-ink:#dfe5f0;
+  --lock:#14264a; --lock-ink:#c9d2e3; --today:#1c3566;
+  --t0:#1c3566; --t1:#14264a; --t2:#dfe5f0; --t3:#3a4a6a; --glyph:#c9d2e3; --glyph2:#14264a;
+}
+
+/* ===== 基础:羊皮纸质感 ===== */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font: 16px/1.55 -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+#app { position: relative; height: 100vh; height: 100dvh; max-width: 480px; margin: 0 auto; overflow: hidden; background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(80,50,10,.16) 100%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .38  0 0 0 0 .28  0 0 0 0 .14  0 0 0 .16 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; }
+.scroll { flex: 1; overflow-y: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
+.scroll.flush { padding: 0; }
+.soft { color: var(--soft); }
+h1, h2, .serif, .clock { font-family: "Songti SC", "Noto Serif SC", "STSong", "SimSun", serif; }
+@media (min-width: 560px) {
+  body { display: grid; place-items: center; background: #2a2318; }
+  #app { height: min(880px, 96vh); width: 400px; border-radius: 38px; border: 9px solid #0e0c09; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+}
+
+/* ===== 顶栏与返回键 ===== */
+.bar { display: flex; align-items: center; gap: 10px; background: var(--bar); color: var(--bar-ink);
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 10px; border-bottom: 2px solid var(--line); flex: none; }
+.bar h1 { flex: 1; margin: 0; font-size: 19px; text-align: center; letter-spacing: 2px; }
+.bar-r { min-width: 88px; text-align: right; }
+.back { min-width: 88px; height: 42px; padding: 0 14px; border-radius: 12px; font-size: 16px; font-weight: 700;
+  background: var(--accent); color: var(--on-accent); border: 2px solid var(--on-accent); box-shadow: 0 3px 0 var(--on-accent); }
+.back:active { transform: translateY(3px); box-shadow: none; }
+
+/* ===== 通用控件 ===== */
+button { font: inherit; cursor: pointer; }
+.btn { background: var(--accent); color: var(--on-accent); border: 2px solid var(--on-accent); border-radius: 12px; padding: 10px 18px; font-weight: 700; }
+.btn.big { width: 100%; padding: 14px; font-size: 17px; margin-top: 14px; }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.danger { background: #b3382c; color: #fff; border-color: #6d1d15; }
+.card { background: var(--surface); border: 2px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+.card h3 { margin: 0 0 8px; font-size: 16px; }
+.field { display: block; margin-bottom: 12px; }
+.field span { display: block; font-size: 13px; color: var(--soft); margin-bottom: 4px; }
+input, select, textarea { width: 100%; font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); border: 2px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+textarea { min-height: 84px; resize: vertical; }
+.pad { padding: 28px 20px; }
+.title { font-size: 36px; line-height: 1.2; margin: 24px 0 8px; }
+.tip { font-size: 13px; color: var(--soft); margin-top: 14px; }
+.tag { font-size: 12px; background: var(--surface2); border-radius: 8px; padding: 1px 8px; color: var(--soft); }
+
+/* ===== 联系人列表(猫头鹰邮局) ===== */
+.contact { display: flex; align-items: center; gap: 14px; padding: 12px 14px; width: 100%; text-align: left; color: var(--ink);
+  background: transparent; border: 0; border-bottom: 1px solid var(--line); }
+.contact .grow { flex: 1; min-width: 0; }
+.contact b { font-size: 18px; font-family: "Songti SC","Noto Serif SC",serif; }
+.contact small { display: block; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.av { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 24px; font-weight: 700; flex: none;
+  border: 3px solid #7a1f26; box-shadow: 0 0 0 2px var(--surface) inset; font-family: "Songti SC","Noto Serif SC",serif; }
+.av.xl { width: 128px; height: 128px; font-size: 56px; margin: 0 auto; }
+.star { background: none; border: 0; font-size: 26px; color: var(--soft); padding: 6px; }
+.star.on { color: var(--accent); }
+
+/* ===== 提示框:灰色半透明 + 白字 ===== */
+#toasts { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 70px); left: 0; right: 0; z-index: 999; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.toast { background: rgba(90,90,90,.8); color: #fff; padding: 9px 16px; border-radius: 12px; font-size: 14px; max-width: 86%; text-align: center; }
+
+/* ===== 入学通知书 ===== */
+.stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; min-height: 60vh; }
+.env { position: relative; width: 270px; height: 180px; perspective: 700px; margin: 20px auto; }
+.env .body { position: absolute; inset: 0; background: var(--surface2); border: 3px solid var(--ink); border-radius: 6px; }
+.env .paper { position: absolute; left: 14px; right: 14px; top: 10px; height: 150px; background: var(--surface); border: 2px solid var(--line); transition: transform .9s ease-in-out; }
+.env .flap { position: absolute; left: 0; right: 0; top: 0; height: 100px; background: var(--accent); clip-path: polygon(0 0, 100% 0, 50% 100%); transform-origin: top center; transition: transform .8s ease-in-out; z-index: 2; }
+.env .seal { position: absolute; left: 50%; top: 74px; width: 36px; height: 36px; margin-left: -18px; border-radius: 50%; background: #8e1b22; color: #ffe08a; display: grid; place-items: center; font-weight: 700; z-index: 3; border: 2px solid #4a0f12; }
+.env.open .flap { transform: rotateX(180deg); }
+.env.open .seal { display: none; }
+.env.open .paper { transform: translateY(-70px); }
+.letter { background: var(--surface); border: 3px double var(--ink); padding: 22px 20px; font-family: "Songti SC","Noto Serif SC","STSong",serif; line-height: 1.85; }
+.letter h2 { text-align: center; margin: 0 0 12px; font-size: 22px; }
+.hint-tap { animation: bob 1.4s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-6px); } }
+
+/* ===== 分院 ===== */
+.opt { display: block; width: 100%; text-align: left; padding: 14px; margin-bottom: 10px; background: var(--surface); color: var(--ink); border: 2px solid var(--line); border-radius: 12px; font-size: 16px; }
+.opt:active { background: var(--accent); color: var(--on-accent); }
+.result { text-align: center; padding: 26px 16px; }
+.result h2 { font-size: 40px; margin: 8px 0; }
+
+/* ===== 锁屏:整块上推 ===== */
+.lockov { position: absolute; inset: 0; z-index: 50; touch-action: none; user-select: none; -webkit-user-select: none;
+  background-color: var(--lock); color: var(--lock-ink);
+  background-image: radial-gradient(ellipse at 50% 40%, transparent 50%, rgba(60,40,10,.25) 100%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .38  0 0 0 0 .28  0 0 0 0 .14  0 0 0 .16 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 20px calc(env(safe-area-inset-bottom, 0px) + 26px); }
+.lockov .top { display: flex; justify-content: space-between; align-items: center; }
+.lockov .back { background: transparent; color: var(--lock-ink); border-color: var(--lock-ink); box-shadow: none; min-width: 80px; }
+.owlpost { letter-spacing: 6px; font-size: 13px; font-weight: 700; opacity: .8; }
+.motto { font-size: 15px; opacity: .8; margin-bottom: 4px; }
+.clock { font-size: 92px; font-weight: 400; line-height: 1; letter-spacing: -2px; }
+.lockov .date { margin-top: 12px; font-size: 18px; }
+.lockov .swipe { text-align: center; font-size: 15px; }
+.lockov .swipe b { display: block; font-size: 34px; line-height: 1; animation: bob 1.3s ease-in-out infinite; }
+.lockov .bar-line { width: 130px; height: 5px; border-radius: 3px; background: var(--lock-ink); margin: 12px auto 0; opacity: .75; }
+
+/* ===== 桌面 ===== */
+.home { flex: 1; overflow-y: auto; padding: 0 16px 20px; -webkit-overflow-scrolling: touch; }
+.owlbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: calc(env(safe-area-inset-top, 0px) + 8px) 0 6px; font-size: 13px; font-weight: 600; }
+.owlbar > :last-child { text-align: right; }
+.owlbar .back { min-width: 0; height: 34px; padding: 0 10px; font-size: 14px; justify-self: start; }
+.homeclock { display: flex; justify-content: space-between; align-items: flex-end; padding: 10px 4px 0; }
+.homeclock .clock { font-size: 76px; }
+.hdate { text-align: center; line-height: 1.1; padding-bottom: 6px; }
+.hdate small { display: block; font-size: 13px; color: var(--soft); }
+.hdate b { font-size: 42px; font-family: "Songti SC","Noto Serif SC",serif; }
+.metaline { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; letter-spacing: 1px; padding: 8px 4px 12px; color: var(--soft); }
+.widget { background: var(--t0); color: var(--glyph); border-radius: 22px; padding: 12px 16px; margin-bottom: 20px; box-shadow: 0 6px 14px rgba(0,0,0,.18); }
+.widget h3 { margin: 0 0 6px; font-size: 15px; font-family: "Songti SC","Noto Serif SC",serif; }
+.slot { display: flex; gap: 10px; font-size: 14px; padding: 2px 8px; border-radius: 10px; opacity: .8; }
+.slot time { width: 48px; flex: none; }
+.slot.now { background: var(--glyph); color: var(--t0); font-weight: 700; opacity: 1; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 4px; }
+.app { display: flex; flex-direction: column; align-items: center; gap: 7px; background: none; border: 0; color: var(--ink); font-size: 12px; padding: 0; text-align: center; line-height: 1.25; }
+.app .ic { width: 66px; height: 66px; border-radius: 18px; display: grid; place-items: center; box-shadow: 0 4px 8px rgba(0,0,0,.25), inset 0 0 0 2px rgba(255,255,255,.12); }
+.app .ic svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.ic.t0 { background: var(--t0); color: var(--glyph); } .ic.t1 { background: var(--t1); color: var(--glyph); }
+.ic.t2 { background: var(--t2); color: var(--glyph2); } .ic.t3 { background: var(--t3); color: var(--glyph); }
+.app.dim { opacity: .5; }
+.homebar { width: 130px; height: 5px; border-radius: 3px; background: var(--ink); opacity: .6; margin: 22px auto 0; }
+
+/* ===== 聊天 ===== */
+.meters { display: flex; gap: 14px; padding: 8px 14px; font-size: 13px; background: var(--surface2); flex: none; }
+.meters i { display: inline-block; height: 6px; border-radius: 3px; background: var(--accent); vertical-align: middle; margin-left: 6px; }
+.msgs { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.b { max-width: 78%; padding: 9px 13px; border-radius: 16px; word-break: break-word; white-space: pre-wrap; }
+.b.me { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 4px; }
+.b.you { align-self: flex-start; background: var(--surface); border: 2px solid var(--line); border-bottom-left-radius: 4px; }
+.note { align-self: center; font-size: 12px; color: var(--soft); }
+.composer { display: flex; gap: 8px; padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px); border-top: 2px solid var(--line); background: var(--bg); flex: none; }
+.composer input { flex: 1; }
+
+/* ===== 通话 ===== */
+.callbody { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 16px; gap: 8px; }
+.cap { min-height: 76px; width: 100%; max-width: 330px; font-size: 16px; padding: 10px 14px; background: var(--surface); border: 2px solid var(--line); border-radius: 14px; margin-top: 14px; }
+.replay { margin-top: 8px; background: none; border: 2px solid var(--line); border-radius: 10px; padding: 4px 12px; color: var(--ink); font-size: 14px; }
+.ctrls { display: flex; justify-content: center; gap: 18px; padding: 16px 12px; flex: none; flex-wrap: wrap; }
+.cbtn { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; color: var(--ink); font-size: 12px; }
+.cbtn .c { width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; background: var(--surface); border: 2px solid var(--line); }
+.cbtn.on .c { background: var(--accent); color: var(--on-accent); border-color: var(--on-accent); }
+.cbtn.red .c { background: #c0392b; color: #fff; border-color: #7a1f15; }
+.cbtn.green .c { background: #2e9d57; color: #fff; border-color: #17592f; }
+.ringing .av { animation: bob 1s ease-in-out infinite; }
+
+/* ===== 日历(仿 iOS 系统日历) ===== */
+.ios-cal { flex: 1; overflow-y: auto; padding: 0 0 20px; }
+.cal-head { display: flex; justify-content: space-between; align-items: flex-end; padding: 14px 16px 8px; }
+.cal-head small { display: block; color: var(--today); font-size: 15px; font-weight: 600; }
+.cal-head b { font-size: 34px; line-height: 1.1; }
+.cal-nav { display: flex; gap: 6px; align-items: center; }
+.cal-nav button { background: none; border: 0; color: var(--today); font-size: 24px; padding: 4px 10px; }
+.cal-nav .today-btn { font-size: 16px; font-weight: 600; }
+.cal-week, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-week { padding: 0 4px; text-align: center; font-size: 12px; color: var(--soft); padding-bottom: 6px; }
+.cal-grid { padding: 0 4px; }
+.cd { height: 58px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); display: flex; flex-direction: column; align-items: center; padding-top: 5px; gap: 3px; }
+.cd .n { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; }
+.cd.dim .n { opacity: .35; }
+.cd.today .n { background: var(--today); color: #fff; font-weight: 700; }
+.cd.sel:not(.today) .n { background: var(--ink); color: var(--bg); }
+.cd .dot { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
+.cd.hol .dot { background: var(--today); }
+.cal-events { padding: 14px 16px; border-top: 1px solid var(--line); margin-top: 4px; }
+.cal-events h4 { margin: 0 0 8px; font-size: 15px; color: var(--soft); font-weight: 600; }
+.evt { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.evt i { width: 4px; border-radius: 2px; background: var(--today); flex: none; }
+.evt small { display: block; color: var(--soft); }
+
+/* ===== 外观 ===== */
+.row { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--surface); border: 2px solid var(--line); border-radius: 14px; margin-bottom: 10px; width: 100%; text-align: left; color: var(--ink); }
+.row .grow { flex: 1; min-width: 0; }
+.swatch { display: flex; gap: 4px; }
+.swatch i { width: 28px; height: 28px; border-radius: 8px; border: 2px solid var(--ink); display: block; }
+
+</style>
 </head>
 <body>
 <div id="app"></div>
 <div id="toasts"></div>
-<script src="data.js"></script>
-<script src="store.js"></script>
-<script src="ai.js"></script>
-<script src="app.js"></script>
+<script>
+/* 静态数据:学院、分院题、角色、节日、课程表。想改内容,改这里就行。 */
+
+const HOUSES = {
+  gryffindor: { name: '格兰芬多', blurb: '勇气、胆识与骑士精神' },
+  hufflepuff: { name: '赫奇帕奇', blurb: '忠诚、耐心与公平' },
+  ravenclaw:  { name: '拉文克劳', blurb: '智慧、好奇与创造' },
+  slytherin:  { name: '斯莱特林', blurb: '野心、机敏与足智多谋' }
+};
+
+const THEMES = {
+  common:     { name: '万用 · 米白与暖黄',   sw: ['#f3ead7', '#e2a92f'] },
+  hufflepuff: { name: '赫奇帕奇 · 明黄与棕', sw: ['#f5c400', '#5a3a1c'] },
+  slytherin:  { name: '斯莱特林 · 墨绿与复古黄', sw: ['#16322a', '#c9a94d'] },
+  gryffindor: { name: '格兰芬多 · 红与明黄', sw: ['#8e1b22', '#f2c230'] },
+  ravenclaw:  { name: '拉文克劳 · 蓝与灰',   sw: ['#1c3566', '#9fb3d6'] }
+};
+
+const QUESTIONS = [
+  { q: '走廊尽头有一个没人敢打开的旧柜子,你会?',
+    o: [['直接打开,看看里面是什么', 'gryffindor'], ['先查查它为什么被封起来', 'ravenclaw'],
+        ['叫上朋友一起,有人陪着才安心', 'hufflepuff'], ['先想清楚打开它能换来什么', 'slytherin']] },
+  { q: '下面哪种品质最让你自豪?',
+    o: [['勇气', 'gryffindor'], ['智慧', 'ravenclaw'], ['忠诚', 'hufflepuff'], ['野心', 'slytherin']] },
+  { q: '周末的下午,你更想待在哪里?',
+    o: [['魁地奇球场', 'gryffindor'], ['图书馆最里面的角落', 'ravenclaw'],
+        ['厨房,和朋友分一盘点心', 'hufflepuff'], ['休息室,和有用的人聊聊', 'slytherin']] },
+  { q: '朋友做错了事,你会?',
+    o: [['当面直说', 'gryffindor'], ['先弄清楚他为什么这么做', 'ravenclaw'],
+        ['陪他一起面对后果', 'hufflepuff'], ['帮他想办法把事情压下去', 'slytherin']] },
+  { q: '你希望别人怎么记住你?',
+    o: [['一个无畏的人', 'gryffindor'], ['一个有见地的人', 'ravenclaw'],
+        ['一个可靠的人', 'hufflepuff'], ['一个了不起的人', 'slytherin']] },
+  { q: '只能带走一件魔法物品,你选?',
+    o: [['会自己战斗的剑', 'gryffindor'], ['能回答任何问题的书', 'ravenclaw'],
+        ['永远装满食物的盘子', 'hufflepuff'], ['能让人听命的权杖', 'slytherin']] }
+];
+
+/* role: student 同时有亲密度和信任度;staff 只有信任度 */
+const CHARACTERS = [
+  { id: 'draco', name: '德拉科·马尔福', role: 'student', house: 'slytherin', color: '#2e6b4f', pitch: 1.05, rate: 1.0,
+    persona: '斯莱特林学生,出身显赫的纯血家族。说话带着贵族式的傲慢和讥讽,嘴硬心软,很在意身边人的看法,不轻易承认自己的关心。对示好会别扭,对被冷落会不爽。' },
+  { id: 'hermione', name: '赫敏·格兰杰', role: 'student', house: 'gryffindor', color: '#a3282f', pitch: 1.2, rate: 1.1,
+    persona: '格兰芬多学生,认真、聪明、爱讲规则,热心但有时会唠叨。重视努力和诚实,讨厌投机取巧和对朋友不负责的人。' },
+  { id: 'luna', name: '卢娜·洛夫古德', role: 'student', house: 'ravenclaw', color: '#4a6aa8', pitch: 1.3, rate: 0.9,
+    persona: '拉文克劳学生,说话轻飘飘的,思路天马行空,相信很多别人不信的事。直率、不记仇,会说出让人愣住的大实话。' },
+  { id: 'cedric', name: '塞德里克·迪戈里', role: 'student', house: 'hufflepuff', color: '#d6a817', pitch: 0.95, rate: 1.0,
+    persona: '赫奇帕奇学生,温和、公平、可靠,擅长魁地奇。对人有耐心,不爱炫耀,遇到不公平的事会站出来。' },
+  { id: 'snape', name: '西弗勒斯·斯内普', role: 'staff', house: null, title: '魔药学教授 | 斯莱特林院长', color: '#2b2b33', pitch: 0.7, rate: 0.85,
+    persona: '魔药学教授,斯莱特林院长。语气冷淡尖刻,话少,爱用讽刺,极少夸人。认真对待魔药课和纪律,对肯下功夫的学生会流露出极其克制的认可。' },
+  { id: 'mcgonagall', name: '米勒娃·麦格', role: 'staff', house: null, title: '变形术教授 | 格兰芬多院长', color: '#6b2a2f', pitch: 0.9, rate: 0.95,
+    persona: '变形术教授,格兰芬多院长。严格、公正、一丝不苟,说话干脆,但对学生有深藏的关心,护短却从不明说。' }
+];
+
+/* 节日(固定日期)。需要更多节日,往里加一行即可。 */
+const HOLIDAYS = [
+  { m: 9,  d: 1,  name: '开学日 · 霍格沃茨特快发车 · 开学宴会' },
+  { m: 10, d: 31, name: '万圣节宴会' },
+  { m: 12, d: 25, name: '圣诞节 · 圣诞舞会(Yule Ball)' },
+  { m: 2,  d: 14, name: '情人节 · 霍格莫德村约会日' },
+  { m: 5,  d: 2,  name: '霍格沃茨之战纪念日' },
+  { m: 7,  d: 31, name: '哈利·波特的生日' },
+  { m: 6,  d: 5,  name: '德拉科·马尔福的生日' }
+];
+
+/* 课程表占位:时间点和科目是示意,尚未按原作核对。
+   键 0=周日 … 6=周六;每项 [开始时间, 内容]。 */
+const MEAL = [['07:30', '早餐 · 礼堂'], ['12:30', '午餐 · 礼堂'], ['18:30', '晚餐 · 礼堂']];
+const DAY_PLAN = {
+  0: [['07:30', '早餐 · 礼堂'], ['10:00', '自由活动'], ['12:30', '午餐 · 礼堂'], ['18:30', '晚餐 · 礼堂']],
+  1: [['07:30', '早餐 · 礼堂'], ['09:00', '魔咒学'], ['10:30', '变形术'], ['12:30', '午餐 · 礼堂'], ['14:00', '草药学'], ['18:30', '晚餐 · 礼堂']],
+  2: [['07:30', '早餐 · 礼堂'], ['09:00', '魔药学'], ['10:30', '黑魔法防御术'], ['12:30', '午餐 · 礼堂'], ['14:00', '飞行课'], ['18:30', '晚餐 · 礼堂']],
+  3: [['07:30', '早餐 · 礼堂'], ['09:00', '变形术'], ['10:30', '魔咒学'], ['12:30', '午餐 · 礼堂'], ['14:00', '魔法史'], ['18:30', '晚餐 · 礼堂']],
+  4: [['07:30', '早餐 · 礼堂'], ['09:00', '草药学'], ['10:30', '魔药学'], ['12:30', '午餐 · 礼堂'], ['14:00', '黑魔法防御术'], ['18:30', '晚餐 · 礼堂']],
+  5: [['07:30', '早餐 · 礼堂'], ['09:00', '魔法史'], ['10:30', '飞行课'], ['12:30', '午餐 · 礼堂'], ['14:00', '自习 · 图书馆'], ['18:30', '晚餐 · 礼堂']],
+  6: [['08:00', '早餐 · 礼堂'], ['10:00', '魁地奇训练 / 自由活动'], ['12:30', '午餐 · 礼堂'], ['18:30', '晚餐 · 礼堂']]
+};
+
+const CARD_FIELDS = [
+  ['name', '名字', 'text'],
+  ['avatar', '头像(一个字或 emoji)', 'text'],
+  ['family', '家族', 'text'],
+  ['gender', '性别', 'select', ['男', '女', '其他']],
+  ['age', '年龄', 'number'],
+  ['grade', '年级', 'grade'],
+  ['appearance', '外貌', 'textarea'],
+  ['height', '身高(cm)', 'text'],
+  ['weight', '体重(kg)', 'text'],
+  ['wand', '魔杖(木材与杖芯)', 'text'],
+  ['skill', '擅长', 'text'],
+  ['bio', '背景资料', 'textarea']
+];
+const GRADES = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '七年级'];
+
+</script>
+<script>
+/* 本地存档:全部存在玩家自己浏览器的 localStorage 里。 */
+const Store = (() => {
+  const KEY = 'hogwarts-phone-v1';
+  const defaults = () => ({
+    v: 1,
+    api: { base: 'https://api.deepseek.com/v1', key: '', model: 'deepseek-chat' },
+    card: {}, seenLetter: false, house: null, sortedAt: 0,
+    theme: 'common', rel: {}, chats: {}
+  });
+  function load() {
+    const d = defaults();
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const o = JSON.parse(raw);
+        return Object.assign(d, o, { api: Object.assign(d.api, o.api || {}) });
+      }
+    } catch (e) { /* 读取失败就用默认值 */ }
+    return d;
+  }
+  function save(s) {
+    try { localStorage.setItem(KEY, JSON.stringify(s)); }
+    catch (e) { console.warn('存档失败', e); }
+  }
+  return { load, save, defaults };
+})();
+
+</script>
+<script>
+/* 调用 OpenAI 兼容接口(DeepSeek 等)。请求直接从玩家浏览器发出,key 不经过任何服务器。 */
+const AI = (() => {
+  function cardText(card, house) {
+    const bits = [];
+    if (card.name) bits.push('名字:' + card.name);
+    if (card.gender) bits.push('性别:' + card.gender);
+    if (card.grade) bits.push('年级:' + GRADES[(+card.grade || 1) - 1]);
+    if (house) bits.push('学院:' + HOUSES[house].name);
+    ['family:家族', 'appearance:外貌', 'skill:擅长', 'bio:背景'].forEach(p => {
+      const [k, label] = p.split(':');
+      if (card[k]) bits.push(label + ':' + card[k]);
+    });
+    return bits.join(';');
+  }
+
+  function system(o) {
+    const c = o.char, r = o.rel, staff = c.role === 'staff';
+    const relText = staff
+      ? `你与玩家的信任度为 ${r.trust}/100(教职工对学生只有信任度,没有亲密度)。`
+      : `你与玩家的亲密度为 ${r.intimacy}/100,信任度为 ${r.trust}/100。`;
+    const style = o.mode === 'call'
+      ? '这是电话通话:口语化,最多两句话,不要写括号动作或旁白。'
+      : '这是手机聊天:像发消息一样自然,1 到 3 句,不要旁白。';
+    return [
+      `你正在一个哈利·波特同人手机应用里扮演「${c.name}」。`,
+      `人设:${c.persona}`,
+      `玩家角色:${cardText(o.card, o.house)}`,
+      `现在是:${new Date().toLocaleString('zh-CN')}`,
+      relText,
+      '规则:',
+      '1. 始终保持角色,不要提到自己是 AI 或在扮演。',
+      '2. ' + style,
+      '3. 根据玩家这句话评估关系变化:友善、尊重、让你开心则上升;冒犯、敷衍、触碰底线则下降;普通寒暄可为 0。变化必须符合你的人设,范围是 -5 到 5 的整数。',
+      staff ? '4. 你是教职工,intimacy 必须为 0,只有 trust 会变化。' : '',
+      '只输出一个 JSON 对象,不要代码块,格式:{"reply":"你说的话","intimacy":整数,"trust":整数}'
+    ].filter(Boolean).join('\n');
+  }
+
+  function parse(text) {
+    const a = text.indexOf('{'), b = text.lastIndexOf('}');
+    if (a >= 0 && b > a) {
+      try {
+        const j = JSON.parse(text.slice(a, b + 1));
+        if (j && typeof j.reply === 'string') return j;
+      } catch (e) { /* 落到下面的兜底 */ }
+    }
+    return { reply: text.trim(), intimacy: 0, trust: 0 };
+  }
+
+  async function ask(o) {
+    const api = o.api;
+    if (!api.key) throw new Error('还没有填写 API Key');
+    const msgs = [{ role: 'system', content: system(o) }]
+      .concat(o.hist.filter(m => m.r === 'user' || m.r === 'assistant').slice(-16)
+        .map(m => ({ role: m.r, content: m.c })));
+    const url = api.base.replace(/\/+$/, '') + '/chat/completions';
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + api.key },
+        body: JSON.stringify({ model: api.model, messages: msgs, temperature: 1.0 })
+      });
+    } catch (e) {
+      throw new Error('网络请求失败:检查 API 地址,或该接口不允许浏览器直接调用(跨域)');
+    }
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error('接口返回 ' + res.status + (res.status === 401 ? '(Key 不对或已失效)' : '') + ' ' + t.slice(0, 80));
+    }
+    const data = await res.json();
+    const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (!text) throw new Error('接口没有返回内容');
+    return parse(text);
+  }
+
+  return { ask };
+})();
+
+</script>
+<script>
+(() => {
+'use strict';
+
+let S = Store.load();
+const $app = document.getElementById('app');
+let stack = [];
+let beforeBack = null;
+let timers = [];
+
+/* ---------- 小工具 ---------- */
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad2 = n => String(n).padStart(2, '0');
+const q = (el, s) => el.querySelector(s);
+const charById = id => CHARACTERS.find(c => c.id === id);
+const save = () => Store.save(S);
+const every = (fn, ms) => { const t = setInterval(fn, ms); timers.push(t); return t; };
+const stopSpeak = () => { try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {} };
+const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
+
+function applyTheme() { document.documentElement.setAttribute('data-theme', S.theme || 'common'); }
+function toast(msg) {
+  const box = document.getElementById('toasts');
+  const d = document.createElement('div');
+  d.className = 'toast'; d.textContent = msg; box.appendChild(d);
+  setTimeout(() => d.remove(), 2800);
+}
+
+/* ---------- 路由 ---------- */
+function render() {
+  timers.forEach(clearInterval); timers = []; beforeBack = null; stopSpeak();
+  const cur = stack[stack.length - 1];
+  const sc = SCREENS[cur.name](cur.p || {});
+  $app.innerHTML = '<div class="screen">' + sc.html + '</div>';
+  if (sc.mount) sc.mount($app.firstChild);
+}
+const go = (name, p) => { stack.push({ name, p: p || {} }); render(); };
+const replace = (name, p) => { stack.pop(); stack.push({ name, p: p || {} }); render(); };
+const root = (name, p) => { stack = [{ name, p: p || {} }]; render(); };
+
+function back() {
+  if (beforeBack) { const f = beforeBack; beforeBack = null; if (f() === false) return; }
+  if (stack.length > 1) { stack.pop(); render(); return; }
+  if (stack[0].name === 'home') { root('lock'); return; }
+  logout();
+}
+function logout() {
+  if (!confirm('退出登录?会清除本机保存的 API Key,下次登录会重新播放入学通知书。游戏进度会保留。')) return;
+  S.api.key = ''; S.seenLetter = false; save(); root('login');
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-back]')) back(); });
+
+/* 每个页面顶部都有醒目的返回/退出键 */
+function header(title, right) {
+  const label = stack.length > 1 ? '‹ 返回' : (stack[0].name === 'home' ? '🔒 锁屏' : '✕ 退出');
+  return `<header class="bar"><button class="back" data-back>${label}</button><h1>${esc(title)}</h1><div class="bar-r">${right || ''}</div></header>`;
+}
+const avatar = (c, cls) => `<div class="av ${cls || ''}" style="background:${c.color}">${esc(c.name[0])}</div>`;
+
+/* ---------- 关系值 ---------- */
+function rel(id) { if (!S.rel[id]) S.rel[id] = { intimacy: 10, trust: 20 }; return S.rel[id]; }
+function applyDelta(c, d) {
+  const r = rel(c.id); const msgs = [];
+  ['intimacy', 'trust'].forEach(k => {
+    if (k === 'intimacy' && c.role === 'staff') return;
+    let v = parseInt(d && d[k], 10);
+    if (!v || isNaN(v)) return;
+    v = Math.max(-5, Math.min(5, v));
+    const nv = Math.max(0, Math.min(100, r[k] + v)); const real = nv - r[k];
+    if (!real) return;
+    r[k] = nv;
+    msgs.push(`${c.name}对你的${k === 'intimacy' ? '亲密度' : '信任度'}${real > 0 ? '提升x' + real : '下降x' + Math.abs(real)}`);
+  });
+  save(); msgs.forEach(toast);
+}
+
+/* ---------- 流程 ---------- */
+function next() {
+  if (!S.api.key) return replace('login');
+  if (!S.card.name) return replace('card');
+  if (!S.seenLetter) return replace('letter');
+  if (!S.house) return replace('sort', { first: true });
+  root('lock');
+}
+function boot() {
+  applyTheme(); stack = [{ name: 'login' }];
+  if (S.api.key && S.card.name && S.seenLetter && S.house) root('lock'); else next();
+}
+
+/* ---------- 表单工具 ---------- */
+function fieldHtml(f, val) {
+  const [k, label, type, opts] = f; const v = val == null ? '' : val;
+  let input;
+  if (type === 'textarea') input = `<textarea data-k="${k}">${esc(v)}</textarea>`;
+  else if (type === 'select') input = `<select data-k="${k}">${opts.map(o => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+  else if (type === 'grade') input = `<select data-k="${k}">${GRADES.map((g, i) => `<option value="${i + 1}" ${(+v || 1) === i + 1 ? 'selected' : ''}>${g}</option>`).join('')}</select>`;
+  else input = `<input data-k="${k}" type="${type === 'number' ? 'number' : 'text'}" value="${esc(v)}">`;
+  return `<label class="field"><span>${label}</span>${input}</label>`;
+}
+function collect(el, keys) {
+  const out = {};
+  keys.forEach(k => { const n = q(el, `[data-k="${k}"]`); if (n) out[k] = n.value.trim(); });
+  return out;
+}
+
+/* ---------- 桌面小组件:今日课程 ---------- */
+function scheduleWidget() {
+  const d = new Date(); const rows = DAY_PLAN[d.getDay()];
+  const now = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  let cur = -1; rows.forEach((r, i) => { if (r[0] <= now) cur = i; });
+  return `<div class="widget"><h3>今日课程 · 周${WEEK[d.getDay()]}</h3>` +
+    rows.map((r, i) => `<div class="slot ${i === cur ? 'now' : ''}"><time>${r[0]}</time><span>${r[1]}</span></div>`).join('') + '</div>';
+}
+
+/* ---------- 语音(iOS 需要用户点击后才允许发声,所以每次点击都先“唤醒”) ---------- */
+function primeSpeech() {
+  try {
+    if (!window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance('。'); u.volume = 0; u.lang = 'zh-CN';
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+function speak(text, c, loud) {
+  if (!window.speechSynthesis) { toast('这个浏览器不支持语音朗读'); return; }
+  try { speechSynthesis.cancel(); speechSynthesis.resume(); } catch (e) {}
+  setTimeout(() => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    const vs = speechSynthesis.getVoices();
+    const v = vs.find(x => /zh[-_]CN/i.test(x.lang)) || vs.find(x => /^zh/i.test(x.lang));
+    if (v) u.voice = v;
+    u.pitch = c.pitch; u.rate = c.rate; u.volume = loud ? 1 : 0.6;
+    speechSynthesis.speak(u);
+  }, 80);
+}
+if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => {};
+
+/* ================= 页面 ================= */
+const APPS = [
+  ['chat', '💬', '聊天'], ['phone', '📞', '电话'], ['calendar', '📅', '日历'], ['memo', '📝', '备忘录'],
+  ['companion', '🕯️', '陪伴'], ['theater', '🎭', '剧场'], ['games', '🎲', '游戏'], ['todo', '✅', '待办'],
+  ['job', '🧹', '兼职'], ['music', '🎵', '歌曲'], ['map', '🗺️', '地图'], ['forum', '📰', '论坛'],
+  ['cup', '🏆', '学院杯'], ['divine', '🔮', '占卜'], ['owl', '🦉', '猫头鹰邮箱'], ['look', '🎨', '外观'],
+  ['shop', '🛍️', '购物'], ['hat', '🎩', '分院帽'], ['set', '⚙️', '设置']
+];
+const READY = ['chat', 'phone', 'calendar', 'look', 'hat', 'set'];
+const ROUTE = { chat: 'chat', phone: 'phone', calendar: 'calendar', look: 'look', hat: 'hat', set: 'settings' };
+
+const ICONS = {
+  chat: '<path d="M8 12h32v20H22l-8 7v-7H8z"/><path d="M15 20h18M15 26h11"/>',
+  phone: '<path d="M14 8l6 2 2 8-4 3a22 22 0 0 0 10 10l3-4 8 2 2 6c-1 6-8 8-14 5A32 32 0 0 1 9 22C6 16 8 9 14 8z"/>',
+  calendar: '<rect x="8" y="11" width="32" height="29" rx="4"/><path d="M8 20h32M16 7v8M32 7v8"/><circle cx="24" cy="30" r="2.5" fill="currentColor"/>',
+  memo: '<path d="M12 8h20l6 6v26H12z"/><path d="M18 22h14M18 29h14M18 36h8"/>',
+  companion: '<path d="M19 22h10v18H19z"/><path d="M24 8c4 5 4 8 0 10-4-2-4-5 0-10z"/><path d="M14 40h20"/>',
+  theater: '<path d="M8 12h20v14a10 10 0 0 1-20 0z"/><circle cx="14" cy="19" r="1.5" fill="currentColor"/><circle cx="22" cy="19" r="1.5" fill="currentColor"/><path d="M13 27q4 4 8 0M30 18h10v12a8 8 0 0 1-14 5"/>',
+  games: '<rect x="9" y="9" width="30" height="30" rx="6"/><circle cx="18" cy="18" r="2.2" fill="currentColor"/><circle cx="30" cy="18" r="2.2" fill="currentColor"/><circle cx="24" cy="24" r="2.2" fill="currentColor"/><circle cx="18" cy="30" r="2.2" fill="currentColor"/><circle cx="30" cy="30" r="2.2" fill="currentColor"/>',
+  todo: '<rect x="9" y="9" width="30" height="30" rx="5"/><path d="M16 24l6 6 11-12"/>',
+  job: '<path d="M38 8L23 24"/><path d="M18 22l8 8-10 10c-6 0-8-4-8-8z"/><path d="M14 34l6 6"/>',
+  music: '<path d="M19 34V12l18-4v22"/><circle cx="14" cy="34" r="5"/><circle cx="32" cy="30" r="5"/>',
+  map: '<path d="M8 12l11-4 10 4 11-4v28l-11 4-10-4-11 4z"/><path d="M19 8v28M29 12v28"/>',
+  forum: '<rect x="9" y="8" width="30" height="32" rx="3"/><path d="M15 16h18M15 23h18M15 30h11"/>',
+  cup: '<path d="M14 8h20v12a10 10 0 0 1-20 0z"/><path d="M14 12H8q0 8 7 9M34 12h6q0 8-7 9M24 30v8M16 40h16"/>',
+  divine: '<circle cx="24" cy="21" r="13"/><path d="M12 36h24l-3 6H15z"/><path d="M18 17q3-4 8-3"/>',
+  owl: '<rect x="7" y="12" width="34" height="24" rx="3"/><path d="M7 15l17 13 17-13"/>',
+  look: '<path d="M24 7C14 7 7 14 7 23s7 18 15 18c3 0 4-2 3-4s0-4 3-4h6c4 0 7-3 7-7C41 14 34 7 24 7z"/><circle cx="16" cy="22" r="2" fill="currentColor"/><circle cx="24" cy="15" r="2" fill="currentColor"/><circle cx="32" cy="22" r="2" fill="currentColor"/>',
+  shop: '<path d="M10 16h28l-2 24H12z"/><path d="M18 20v-6a6 6 0 0 1 12 0v6"/>',
+  hat: '<path d="M6 38h36M12 38c2-4 6-6 8-14l4-16c3 6 6 12 8 18 2 5 5 8 6 12"/>',
+  set: '<circle cx="24" cy="24" r="6"/><path d="M24 7v6M24 35v6M7 24h6M35 24h6M12 12l4 4M32 32l4 4M36 12l-4 4M16 32l-4 4"/>'
+};
+const MOTTOS = ['别在走廊里施法', '熄灯后禁止外出', '图书馆请保持安静', '魔药课别迟到', '禁林禁止入内', '楼梯会换方向,留意脚下'];
+const svgIcon = k => `<svg viewBox="0 0 48 48" aria-hidden="true">${ICONS[k]}</svg>`;
+
+const SCREENS = {};
+
+/* --- 登录(填 Key) --- */
+SCREENS.login = () => ({
+  html: `<div class="scroll pad"><h1 class="title">霍格沃茨<br>小手机</h1>
+    <p class="soft">一部属于你的魔法手机。先填写你自己的 AI 接口,就能开始玩。</p>
+    ${fieldHtml(['base', 'API 地址', 'text'], S.api.base)}
+    ${fieldHtml(['model', '模型名', 'text'], S.api.model)}
+    ${fieldHtml(['key', 'API Key', 'text'], S.api.key).replace('type="text"', 'type="password"')}
+    <button class="btn big" id="go">进入霍格沃茨</button>
+    <p class="tip">Key 只保存在这台设备的浏览器里,请求直接从你的浏览器发给 AI 服务,不会经过我们的服务器。</p></div>`,
+  mount(el) {
+    q(el, '#go').onclick = () => {
+      const v = collect(el, ['base', 'model', 'key']);
+      if (!v.key) return toast('请先填写 API Key');
+      S.api = { base: v.base || 'https://api.deepseek.com/v1', model: v.model || 'deepseek-chat', key: v.key };
+      save(); next();
+    };
+  }
+});
+
+/* --- 新建角色卡(简版) --- */
+SCREENS.card = () => ({
+  html: header('创建你的角色') + `<div class="scroll">
+    ${fieldHtml(CARD_FIELDS[0], S.card.name)}
+    ${fieldHtml(CARD_FIELDS[3], S.card.gender)}
+    ${fieldHtml(CARD_FIELDS[5], S.card.grade || 1)}
+    ${fieldHtml(CARD_FIELDS[4], S.card.age || 11)}
+    <p class="tip">外貌、魔杖、背景等可以进入游戏后在「设置」里补充。</p>
+    <button class="btn big" id="ok">收下通知书</button></div>`,
+  mount(el) {
+    q(el, '#ok').onclick = () => {
+      const v = collect(el, ['name', 'gender', 'grade', 'age']);
+      if (!v.name) return toast('请填写名字');
+      S.card = Object.assign({}, S.card, v); save(); next();
+    };
+  }
+});
+
+/* --- 入学通知书(只在登录后第一次播放) --- */
+SCREENS.letter = () => {
+  const c = S.card;
+  return {
+    html: header('猫头鹰送来了一封信') + `<div class="scroll"><div class="stage" id="stage">
+      <div class="env" id="env"><div class="body"></div><div class="paper"></div><div class="flap"></div><div class="seal">H</div></div>
+      <p class="soft hint-tap" id="hint">点一下信封</p></div></div>`,
+    mount(el) {
+      const env = q(el, '#env');
+      env.onclick = () => {
+        if (env.classList.contains('open')) return;
+        env.classList.add('open'); q(el, '#hint').style.visibility = 'hidden';
+        setTimeout(() => {
+          q(el, '#stage').innerHTML = `<div class="letter">
+            <h2>霍格沃茨魔法学校</h2>
+            <p>亲爱的 ${esc(c.name)}:</p>
+            <p>我们很高兴地通知你,你已被录取,将在九月一日进入霍格沃茨学习魔法。随信附有所需书籍与用品的清单。</p>
+            <p>开学列车将在九月一日上午从国王十字车站发车。请务必准时,并带上你的猫头鹰、猫或蟾蜍(三选一)。</p>
+            <p style="text-align:right">副校长 敬上</p>
+            <button class="btn big" id="cont">前往分院</button></div>`;
+          q(el, '#cont').onclick = () => { S.seenLetter = true; save(); next(); };
+        }, 1700);
+      };
+    }
+  };
+};
+
+/* --- 分院测试 --- */
+SCREENS.sort = p => {
+  let i = 0; const picks = [];
+  return {
+    html: header('分院帽') + '<div class="scroll" id="box"></div>',
+    mount(el) {
+      const box = q(el, '#box');
+      beforeBack = () => { if (!picks.length) return true; picks.pop(); i--; draw(); return false; };
+      function draw() {
+        beforeBack = () => { if (!picks.length) return true; picks.pop(); i--; draw(); return false; };
+        const Q = QUESTIONS[i];
+        box.innerHTML = `<p class="soft">第 ${i + 1} / ${QUESTIONS.length} 题</p><h2 class="serif">${Q.q}</h2>` +
+          Q.o.map((o, n) => `<button class="opt" data-n="${n}">${o[0]}</button>`).join('');
+        box.querySelectorAll('.opt').forEach(b => b.onclick = () => {
+          picks.push(Q.o[+b.dataset.n][1]); i++;
+          if (i >= QUESTIONS.length) finish(); else draw();
+        });
+      }
+      function finish() {
+        beforeBack = null;
+        const score = {}; picks.forEach(h => score[h] = (score[h] || 0) + 1);
+        const max = Math.max(...Object.values(score));
+        const top = Object.keys(score).filter(h => score[h] === max);
+        const h = top[Math.floor(Math.random() * top.length)];
+        S.sortedAt = Date.now();
+        if (p.first || !S.house) {
+          S.house = h; save();
+          box.innerHTML = `<div class="result"><p class="soft">分院帽喊道——</p><h2 class="serif">${HOUSES[h].name}!</h2><p>${HOUSES[h].blurb}</p>
+            <button class="btn big" id="enter">进入小手机</button></div>`;
+          q(box, '#enter').onclick = () => root('lock');
+        } else if (h === S.house) {
+          save();
+          box.innerHTML = `<div class="result"><p class="soft">分院帽再次喊道——</p><h2 class="serif">${HOUSES[h].name}!</h2><p>你仍然属于${HOUSES[h].name}。</p>
+            <button class="btn big" id="ok">好的</button></div>`;
+          q(box, '#ok').onclick = back;
+        } else {
+          save();
+          box.innerHTML = `<div class="result"><p class="soft">这一次,分院帽想把你分进——</p><h2 class="serif">${HOUSES[h].name}</h2>
+            <p>要转入${HOUSES[h].name},还是留在${HOUSES[S.house].name}?</p>
+            <button class="btn big" id="yes">转入${HOUSES[h].name}</button>
+            <button class="btn big ghost" id="no">留在${HOUSES[S.house].name}</button></div>`;
+          q(box, '#yes').onclick = () => { S.house = h; save(); toast('你现在是' + HOUSES[h].name + '的学生'); back(); };
+          q(box, '#no').onclick = back;
+        }
+      }
+      draw();
+    }
+  };
+};
+
+/* --- 锁屏(整块上推解锁,没有淡入淡出) --- */
+SCREENS.lock = () => {
+  const h = SCREENS.home();
+  return {
+    html: h.html + `<div class="lockov" id="ov">
+      <div class="top"><button class="back" data-back>✕ 退出</button><span class="owlpost">OWLPOST</span><span style="min-width:80px"></span></div>
+      <div><div class="motto">${MOTTOS[new Date().getDate() % MOTTOS.length]}</div><div class="clock" id="clk"></div><div class="date" id="dt"></div></div>
+      <div class="swipe"><b>⌃</b>上滑解锁<div class="bar-line"></div></div></div>`,
+    mount(el) {
+      h.mount(el);
+      const ov = q(el, '#ov');
+      const tick = () => {
+        const n = new Date();
+        q(el, '#clk').textContent = pad2(n.getHours()) + ':' + pad2(n.getMinutes());
+        q(el, '#dt').textContent = `${n.getMonth() + 1}月${n.getDate()}日 星期${WEEK[n.getDay()]}`;
+      };
+      tick(); every(tick, 1000);
+      let y0 = null, dy = 0;
+      ov.addEventListener('pointerdown', e => {
+        if (e.target.closest('[data-back]')) return;
+        y0 = e.clientY; dy = 0; ov.style.transition = 'none'; try { ov.setPointerCapture(e.pointerId); } catch (x) {}
+      });
+      ov.addEventListener('pointermove', e => {
+        if (y0 == null) return;
+        dy = Math.min(0, e.clientY - y0); ov.style.transform = `translateY(${dy}px)`;
+      });
+      const end = () => {
+        if (y0 == null) return; y0 = null;
+        ov.style.transition = 'transform .26s ease-out';
+        if (dy < -window.innerHeight * 0.2) {
+          ov.style.transform = 'translateY(-100%)';
+          setTimeout(() => { ov.remove(); stack = [{ name: 'home', p: {} }]; }, 270);
+        } else { ov.style.transform = 'translateY(0)'; if (Math.abs(dy) < 6) toast('向上滑动解锁'); }
+      };
+      ov.addEventListener('pointerup', end); ov.addEventListener('pointercancel', end);
+    }
+  };
+};
+
+/* --- 桌面 --- */
+SCREENS.home = () => {
+  const n = new Date(); const hn = HOUSES[S.house] ? HOUSES[S.house].name : '霍格沃茨';
+  return {
+    html: `<div class="home"><div class="owlbar"><button class="back" data-back>🔒 锁屏</button><span class="owlpost">OWLPOST</span><span id="st"></span></div>
+      <div class="homeclock"><div><div class="motto">${MOTTOS[n.getDate() % MOTTOS.length]}</div><div class="clock" id="hc"></div></div>
+        <div class="hdate"><small>${n.getMonth() + 1}月</small><b>${n.getDate()}</b><small>周${WEEK[n.getDay()]}</small></div></div>
+      <div class="metaline"><span>${n.getFullYear()}年${n.getMonth() + 1}月${n.getDate()}日</span><span>${hn}</span></div>
+      ${scheduleWidget()}
+      <div class="grid">${APPS.map((a, i) => `<button class="app ${READY.includes(a[0]) ? '' : 'dim'}" data-app="${a[0]}"><span class="ic t${[0, 1, 2, 3][(i * 3 + Math.floor(i / 4)) % 4]}">${svgIcon(a[0])}</span>${a[2]}</button>`).join('')}</div>
+      <div class="homebar"></div></div>`,
+    mount(el) {
+      const t = () => {
+        const d = new Date(); const c = q(el, '#hc'), s2 = q(el, '#st');
+        if (c) c.textContent = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+        if (s2) s2.textContent = hn;
+      };
+      t(); every(t, 15000);
+      el.querySelectorAll('[data-app]').forEach(b => b.onclick = () => {
+        const id = b.dataset.app;
+        if (!READY.includes(id)) return toast('这个软件还在建设中');
+        go(ROUTE[id]);
+      });
+    }
+  };
+};
+
+/* --- 聊天列表(猫头鹰邮局) --- */
+SCREENS.chat = () => {
+  S.fav = S.fav || {};
+  const list = CHARACTERS.slice().sort((a, b) => (S.fav[b.id] ? 1 : 0) - (S.fav[a.id] ? 1 : 0));
+  return {
+    html: header('猫头鹰邮局') + `<div class="scroll flush">${list.map(c => {
+      const r = rel(c.id); const h = S.chats[c.id] || []; const last = [...h].reverse().find(m => m.r !== 'note');
+      const sub = c.role === 'staff' ? c.title : HOUSES[c.house].name + ' | 学生';
+      return `<div class="contact" data-id="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b>
+        <small>${sub}</small><small>${last ? esc(last.c) : (c.role === 'staff' ? '' : '亲密度 ' + r.intimacy + ' · ') + '信任度 ' + r.trust}</small></span>
+        <button class="star ${S.fav[c.id] ? 'on' : ''}" data-star="${c.id}">${S.fav[c.id] ? '★' : '☆'}</button></div>`;
+    }).join('')}<p class="tip" style="padding:0 16px">群聊、朋友圈会在后续版本加入。</p></div>`,
+    mount(el) {
+      el.querySelectorAll('.contact').forEach(r => r.onclick = e => {
+        const st = e.target.closest('[data-star]');
+        if (st) { S.fav[st.dataset.star] = !S.fav[st.dataset.star]; save(); render(); return; }
+        go('chatroom', { id: r.dataset.id });
+      });
+    }
+  };
+};
+
+/* --- 聊天室 --- */
+SCREENS.chatroom = p => {
+  const c = charById(p.id);
+  const bubble = m => m.r === 'note' ? `<div class="note">${esc(m.c)}</div>` : `<div class="b ${m.r === 'user' ? 'me' : 'you'}">${esc(m.c)}</div>`;
+  const meters = () => { const r = rel(c.id); return (c.role === 'staff' ? '' : `<span>亲密度 ${r.intimacy}<i style="width:${r.intimacy * 0.6}px"></i></span>`) + `<span>信任度 ${r.trust}<i style="width:${r.trust * 0.6}px"></i></span>`; };
+  return {
+    html: header(c.name) + `<div class="meters" id="mt">${meters()}</div><div class="msgs" id="ms">${(S.chats[c.id] || []).map(bubble).join('')}</div>
+      <form class="composer" id="f"><input id="t" placeholder="说点什么…" autocomplete="off"><button class="btn">发送</button></form>`,
+    mount(el) {
+      const ms = q(el, '#ms'), t = q(el, '#t'); let busy = false;
+      const down = () => { ms.scrollTop = ms.scrollHeight; }; down();
+      const push = m => { (S.chats[c.id] = S.chats[c.id] || []).push(m); ms.insertAdjacentHTML('beforeend', bubble(m)); save(); down(); };
+      q(el, '#f').onsubmit = async e => {
+        e.preventDefault(); const v = t.value.trim(); if (!v || busy) return;
+        busy = true; t.value = ''; push({ r: 'user', c: v });
+        ms.insertAdjacentHTML('beforeend', '<div class="b you" id="typing">…</div>'); down();
+        try {
+          const out = await AI.ask({ char: c, card: S.card, house: S.house, rel: rel(c.id), hist: S.chats[c.id], api: S.api, mode: 'chat' });
+          const ty = q(el, '#typing'); if (ty) ty.remove();
+          push({ r: 'assistant', c: out.reply }); applyDelta(c, out); q(el, '#mt').innerHTML = meters();
+        } catch (err) { const ty = q(el, '#typing'); if (ty) ty.remove(); toast(err.message); }
+        busy = false;
+      };
+    }
+  };
+};
+
+/* --- 电话:选人 --- */
+SCREENS.phone = () => ({
+  html: header('电话') + `<div class="scroll"><p class="soft">一次只能和一个人通话。可以直接打字,角色会用声音回答你。</p>${CHARACTERS.map(c =>
+    `<button class="row" data-id="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b><small>点击拨打</small></span><span style="font-size:24px">📞</span></button>`).join('')}</div>`,
+  mount(el) { el.querySelectorAll('.row').forEach(b => b.onclick = () => { primeSpeech(); go('call', { id: b.dataset.id }); }); }
+});
+
+/* --- 通话界面 --- */
+SCREENS.call = p => {
+  const c = charById(p.id);
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let st = p.incoming ? 'ringing' : 'dialing', sec = 0, muted = false, spk = false, busy = false; const hist = [];
+  return {
+    html: header('通话') + `<div class="callbody ${st === 'connected' ? '' : 'ringing'}" id="cb">${avatar(c, 'xl')}<h2 style="margin:6px 0 0">${esc(c.name)}</h2>
+      <div class="soft" id="cs"></div><div class="cap" id="cap">&nbsp;</div><button class="replay" id="rp" style="display:none">🔊 再听一遍</button></div>
+      <div class="ctrls" id="ct"></div>
+      <form class="composer" id="cf" style="display:none"><input id="ci" placeholder="打字回复…" autocomplete="off"><button class="btn">发送</button></form>`,
+    mount(el) {
+      const cs = q(el, '#cs'), cap = q(el, '#cap'), ct = q(el, '#ct'), cf = q(el, '#cf'), ci = q(el, '#ci');
+      const mmss = () => pad2(Math.floor(sec / 60)) + ':' + pad2(sec % 60);
+      const btn = (act, ic, label, cls) => `<button class="cbtn ${cls || ''}" data-act="${act}"><span class="c">${ic}</span>${label}</button>`;
+      function draw() {
+        q(el, '#cb').classList.toggle('ringing', st !== 'connected');
+        cs.textContent = st === 'ringing' ? '来电…' : st === 'dialing' ? '正在呼叫…' : mmss();
+        cf.style.display = st === 'connected' ? 'flex' : 'none';
+        ct.innerHTML = st === 'ringing' ? btn('hang', '✕', '挂断', 'red') + btn('answer', '✆', '接听', 'green')
+          : st === 'dialing' ? btn('hang', '✕', '挂断', 'red')
+          : btn('mute', muted ? '🔇' : '🔈', '静音', muted ? 'on' : '') + btn('spk', '📢', '免提', spk ? 'on' : '')
+            + (SR ? btn('mic', '🎙', '说话') : '') + btn('hang', '✕', '挂断', 'red');
+      }
+      let lastLine = '';
+      function say(text) { if (st !== 'connected') return; lastLine = text; cap.textContent = text; q(el, '#rp').style.display = 'inline-block'; if (!muted) speak(text, c, spk); }
+      q(el, '#rp').onclick = () => { primeSpeech(); if (lastLine) speak(lastLine, c, spk); };
+      async function turn(userText, hidden) {
+        if (busy) return; busy = true;
+        const h = hist.concat([{ r: 'user', c: userText }]);
+        if (!hidden) hist.push({ r: 'user', c: userText });
+        try {
+          const out = await AI.ask({ char: c, card: S.card, house: S.house, rel: rel(c.id), hist: h, api: S.api, mode: 'call' });
+          if (st !== 'connected') { busy = false; return; }
+          hist.push({ r: 'assistant', c: out.reply }); say(out.reply); applyDelta(c, out);
+        } catch (err) { toast(err.message); }
+        busy = false;
+      }
+      function connect() {
+        st = 'connected'; sec = 0; draw(); every(() => { sec++; cs.textContent = mmss(); }, 1000);
+        turn('(电话接通了,请你自然地先开口说话)', true);
+      }
+      beforeBack = () => {
+        stopSpeak();
+        const wasOn = st === 'connected'; st = 'ended';
+        if (wasOn && sec > 0) { (S.chats[c.id] = S.chats[c.id] || []).push({ r: 'note', c: '通话 ' + mmss() }); save(); }
+        return true;
+      };
+      ct.onclick = e => {
+        const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act;
+        if (a === 'hang') back();
+        else if (a === 'answer') { primeSpeech(); connect(); }
+        else if (a === 'mute') { muted = !muted; if (muted) stopSpeak(); draw(); }
+        else if (a === 'spk') { spk = !spk; draw(); toast(spk ? '免提已开(音量调大)' : '免提已关'); }
+        else if (a === 'mic' && SR) {
+          const r = new SR(); r.lang = 'zh-CN';
+          r.onresult = ev => { const t = ev.results[0][0].transcript; ci.value = ''; cap.textContent = '你:' + t; turn(t); };
+          r.onerror = () => toast('没能听清,可以直接打字');
+          try { r.start(); toast('请说话…'); } catch (err) { toast('麦克风不可用,可以直接打字'); }
+        }
+      };
+      cf.onsubmit = e => { e.preventDefault(); primeSpeech(); const v = ci.value.trim(); if (!v) return; ci.value = ''; cap.textContent = '你:' + v; turn(v); };
+      draw();
+      if (st === 'dialing') setTimeout(() => { if (st === 'dialing') connect(); }, 2000);
+    }
+  };
+};
+
+/* --- 日历(仿 iOS 系统日历,读取内置 HP 节日表) --- */
+SCREENS.calendar = () => {
+  const n = new Date(); let y = n.getFullYear(), m = n.getMonth() + 1;
+  let sel = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  const same = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  return {
+    html: header('日历') + `<div class="ios-cal"><div class="cal-head"><div><small id="yy"></small><b id="mm"></b></div>
+      <div class="cal-nav"><button id="pv">‹</button><button id="td" class="today-btn">今天</button><button id="nx">›</button></div></div>
+      <div class="cal-week">${WEEK.map(w => `<div>${w}</div>`).join('')}</div><div class="cal-grid" id="cg"></div><div class="cal-events" id="ev"></div></div>`,
+    mount(el) {
+      function events() {
+        const hs = HOLIDAYS.filter(h => h.m === sel.getMonth() + 1 && h.d === sel.getDate());
+        q(el, '#ev').innerHTML = `<h4>${sel.getMonth() + 1}月${sel.getDate()}日 星期${WEEK[sel.getDay()]}</h4>` +
+          (hs.length ? hs.map(h => `<div class="evt"><i></i><div><b>${h.name}</b><small>全天</small></div></div>`).join('') : '<p class="soft" style="margin:0">无日程</p>');
+      }
+      function draw() {
+        q(el, '#yy').textContent = y + '年'; q(el, '#mm').textContent = m + '月';
+        const first = new Date(y, m - 1, 1).getDay(), days = new Date(y, m, 0).getDate();
+        const weeks = Math.ceil((first + days) / 7); let s = '';
+        for (let i = 0; i < weeks * 7; i++) {
+          const d = new Date(y, m - 1, 1 - first + i);
+          const hol = HOLIDAYS.some(h => h.m === d.getMonth() + 1 && h.d === d.getDate());
+          s += `<button class="cd ${d.getMonth() !== m - 1 ? 'dim' : ''} ${same(d, n) ? 'today' : ''} ${same(d, sel) ? 'sel' : ''} ${hol ? 'hol' : ''}" data-t="${d.getTime()}"><span class="n">${d.getDate()}</span><span class="dot"></span></button>`;
+        }
+        q(el, '#cg').innerHTML = s; events();
+        el.querySelectorAll('.cd').forEach(b => b.onclick = () => { sel = new Date(+b.dataset.t); y = sel.getFullYear(); m = sel.getMonth() + 1; draw(); });
+      }
+      const step = k => { m += k; if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; } draw(); };
+      q(el, '#pv').onclick = () => step(-1); q(el, '#nx').onclick = () => step(1);
+      q(el, '#td').onclick = () => { sel = new Date(n.getFullYear(), n.getMonth(), n.getDate()); y = n.getFullYear(); m = n.getMonth() + 1; draw(); };
+      let x0 = null; const g = q(el, '#cg');
+      g.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+      g.addEventListener('touchend', e => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1); });
+      draw();
+    }
+  };
+};
+
+/* --- 分院帽(每周只能测一次) --- */
+SCREENS.hat = () => {
+  const left = S.sortedAt + 7 * 864e5 - Date.now();
+  const ok = left <= 0;
+  const when = new Date(S.sortedAt + 7 * 864e5);
+  return {
+    html: header('分院帽') + `<div class="scroll"><div class="result"><div style="font-size:64px">🎩</div>
+      <p class="soft">你现在是</p><h2 class="serif">${S.house ? HOUSES[S.house].name : '未分院'}</h2>
+      ${ok ? '<p>想让分院帽再看你一次吗?</p><button class="btn big" id="re">重新测试</button>'
+           : `<p class="soft">每周只能测试一次。下次可测试:${when.getMonth() + 1}月${when.getDate()}日 ${pad2(when.getHours())}:${pad2(when.getMinutes())}</p>`}</div></div>`,
+    mount(el) { const b = q(el, '#re'); if (b) b.onclick = () => replace('sort', { first: false }); }
+  };
+};
+
+/* --- 外观 --- */
+SCREENS.look = () => ({
+  html: header('外观') + `<div class="scroll">${Object.keys(THEMES).map(k =>
+    `<button class="row" data-k="${k}"><span class="swatch">${THEMES[k].sw.map(c => `<i style="background:${c}"></i>`).join('')}</span><span class="grow"><b>${THEMES[k].name}</b></span><span>${S.theme === k ? '✓' : ''}</span></button>`).join('')}</div>`,
+  mount(el) { el.querySelectorAll('.row').forEach(b => b.onclick = () => { S.theme = b.dataset.k; save(); applyTheme(); render(); }); }
+});
+
+/* --- 设置:角色卡 / 接口 / 存档 --- */
+SCREENS.settings = () => ({
+  html: header('设置') + `<div class="scroll">
+    <div class="card"><h3>角色卡</h3>${CARD_FIELDS.map(f => fieldHtml(f, S.card[f[0]])).join('')}
+      <p class="soft">学院:${S.house ? HOUSES[S.house].name : '未分院'}(在「分院帽」里更改)</p>
+      <button class="btn big" id="sc">保存角色卡</button></div>
+    <div class="card"><h3>AI 接口</h3>${fieldHtml(['base', 'API 地址', 'text'], S.api.base)}${fieldHtml(['model', '模型名', 'text'], S.api.model)}
+      ${fieldHtml(['key', 'API Key', 'text'], S.api.key).replace('type="text"', 'type="password"')}<button class="btn big" id="sa">保存接口设置</button></div>
+    <div class="card"><h3>存档(不含 API Key)</h3><textarea id="ta" placeholder="导出的内容会出现在这里;导入时把存档粘贴到这里"></textarea>
+      <button class="btn big" id="ex">导出存档</button><button class="btn big ghost" id="im">导入存档</button></div>
+    <div class="card"><h3>账号</h3><button class="btn big danger" id="lo">退出登录(清除 Key)</button></div></div>`,
+  mount(el) {
+    q(el, '#sc').onclick = () => { const v = collect(el, CARD_FIELDS.map(f => f[0])); if (!v.name) return toast('名字不能为空'); S.card = Object.assign({}, S.card, v); save(); toast('角色卡已保存'); };
+    q(el, '#sa').onclick = () => {
+      const base = q(el, 'input[data-k="base"]').value.trim(), model = q(el, 'input[data-k="model"]').value.trim(), key = q(el, 'input[data-k="key"]').value.trim();
+      if (!key) return toast('Key 不能为空'); S.api = { base, model, key }; save(); toast('接口设置已保存');
+    };
+    q(el, '#ex').onclick = () => {
+      const data = JSON.stringify(Object.assign({}, S, { api: { base: S.api.base, model: S.api.model, key: '' } }));
+      const ta = q(el, '#ta'); ta.value = data; ta.select(); toast('已导出,复制保存即可');
+    };
+    q(el, '#im').onclick = () => {
+      try {
+        const o = JSON.parse(q(el, '#ta').value);
+        if (!o || typeof o !== 'object' || !o.card) throw new Error('bad');
+        S = Object.assign(Store.defaults(), o, { api: S.api }); save(); applyTheme(); toast('导入成功'); render();
+      } catch (e) { toast('存档格式不对,没有导入'); }
+    };
+    q(el, '#lo').onclick = logout;
+  }
+});
+
+boot();
+})();
+
+</script>
 </body>
 </html>
