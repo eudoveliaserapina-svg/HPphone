@@ -61,7 +61,7 @@ h1, h2, .serif, .clock { font-family: "Songti SC", "Noto Serif SC", "STSong", "S
 /* ===== 顶栏与返回键 ===== */
 .bar { display: flex; align-items: center; gap: 10px; background: var(--bar); color: var(--bar-ink);
   padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 10px; border-bottom: 2px solid var(--line); flex: none; }
-.bar h1 { flex: 1; margin: 0; font-size: 19px; text-align: center; letter-spacing: 2px; }
+.bar h1 { flex: 1; margin: 0; font-size: 17px; text-align: center; letter-spacing: 2px; }
 .bar-r { min-width: 88px; text-align: right; }
 .back { min-width: 88px; height: 42px; padding: 0 14px; border-radius: 12px; font-size: 16px; font-weight: 700;
   background: var(--accent); color: var(--on-accent); border: 2px solid var(--on-accent); box-shadow: 0 3px 0 var(--on-accent); }
@@ -458,7 +458,7 @@ const Store = (() => {
     v: 2,
     api: { base: 'https://api.siliconflow.cn/v1', key: '', model: 'deepseek-ai/DeepSeek-V3' },
     vision: { base: '', key: '', model: '' },
-    tts: { mode: 'browser', base: 'https://api.siliconflow.cn/v1', key: '', model: 'FunAudioLLM/CosyVoice2-0.5B', voices: {} },
+    tts: { key: '', model: 'eleven_multilingual_v2', stability: 0.5, similarity: 0.75, voices: {} },
     card: {}, seenLetter: false, house: null, sortedAt: 0, theme: 'common',
     rel: {}, chats: {}, fav: {},
     coins: 986, inv: {}, frogs: {}, rewards: {},
@@ -585,18 +585,23 @@ const AI = (() => {
     return (await raw(cfg, [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: dataUrl } }] }], 0.3)).trim();
   }
 
-  /* 语音合成(OpenAI 兼容 /audio/speech),返回可播放的 blob 地址 */
-  async function tts(cfg, input, voice) {
-    const url = cfg.base.replace(/\/+$/, '') + '/audio/speech';
+  /* 语音合成:ElevenLabs。请求从玩家浏览器直接发出,返回可播放的 blob 地址 */
+  async function tts(cfg, input, voiceId) {
+    if (!cfg.key) throw new Error('还没有填写 ElevenLabs 的 API Key');
+    if (!voiceId) throw new Error('这个角色还没有填写 Voice ID');
     let res;
     try {
-      res = await fetch(url, {
+      res = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId) + '?output_format=mp3_44100_128', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.key },
-        body: JSON.stringify({ model: cfg.model, input, voice: voice.includes(':') || voice.startsWith('speech:') ? voice : cfg.model + ':' + voice, response_format: 'mp3' })
+        headers: { 'xi-api-key': cfg.key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+        body: JSON.stringify({ text: input, model_id: cfg.model || 'eleven_multilingual_v2',
+          voice_settings: { stability: +cfg.stability || 0.5, similarity_boost: +cfg.similarity || 0.75 } })
       });
-    } catch (e) { throw new Error('语音接口连不上(可能是跨域限制)'); }
-    if (!res.ok) throw new Error('语音接口返回 ' + res.status);
+    } catch (e) { throw new Error('连不上 ElevenLabs(网络或跨域限制)'); }
+    if (!res.ok) {
+      const code = res.status;
+      throw new Error(code === 401 ? 'ElevenLabs Key 不对或已失效' : code === 404 || code === 422 ? 'Voice ID 不对,或这个声音还没加入你的声音库' : code === 402 || code === 429 ? 'ElevenLabs 额度用完或请求太快' : 'ElevenLabs 返回 ' + code);
+    }
     return URL.createObjectURL(await res.blob());
   }
 
@@ -756,40 +761,27 @@ function scheduleWidget() {
     <div class="wd-r">${rest.length ? rest.map(r => `<div class="slot"><time>${r[0]}</time><span>${r[1].split(' · ')[0]}</span></div>`).join('') : '<div class="slot"><span>今天没有更多安排了</span></div>'}</div></div>`;
 }
 
-/* ---------- 语音:自带朗读 + 可选的 TTS 接口(每个角色可有自己的音色) ---------- */
+/* ---------- 角色语音:ElevenLabs(每个角色一个 Voice ID)。不使用浏览器自带朗读。 ---------- */
 const player = new Audio();
 const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
-let lastBlob = null;
-function primeSpeech() {
+const voiceCache = new Map();
+const voiceId = c => (S.tts.voices && S.tts.voices[c.id]) || '';
+const cleanForSpeech = t => String(t).replace(/[（(][^）)]*[）)]|\*[^*]*\*|【[^】]*】|[「」]/g, '').replace(/\s+/g, ' ').trim();
+function primeSpeech() { /* iOS 要求在点击时“唤醒”音频播放器,之后才允许异步播放 */
   try { player.src = SILENT; const p = player.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
-  try { if (window.speechSynthesis) { const u = new SpeechSynthesisUtterance('。'); u.volume = 0; u.lang = 'zh-CN'; speechSynthesis.speak(u); } } catch (e) {}
 }
-function stopSpeak() {
-  try { player.pause(); } catch (e) {}
-  try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {}
-}
-function browserSpeak(text, c, loud) {
-  if (!window.speechSynthesis) { toast('这个浏览器不支持语音朗读'); return; }
-  try { speechSynthesis.cancel(); speechSynthesis.resume(); } catch (e) {}
-  setTimeout(() => {
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'zh-CN';
-    const vs = speechSynthesis.getVoices();
-    const v = vs.find(x => /zh[-_]CN/i.test(x.lang)) || vs.find(x => /^zh/i.test(x.lang));
-    if (v) u.voice = v;
-    u.pitch = c.pitch; u.rate = c.rate; u.volume = loud ? 1 : 0.6;
-    speechSynthesis.speak(u);
-  }, 80);
-}
-async function speak(text, c, loud) {
-  if (S.tts.mode === 'api' && S.tts.key) {
-    try {
-      const url = await AI.tts(S.tts, text, (S.tts.voices && S.tts.voices[c.id]) || c.voice || 'alex');
-      if (lastBlob) URL.revokeObjectURL(lastBlob);
-      lastBlob = url; player.src = url; player.volume = loud ? 1 : 0.7; await player.play(); return;
-    } catch (e) { toast('语音接口失败,改用系统朗读:' + e.message); }
+function stopSpeak() { try { player.pause(); } catch (e) {} }
+/* 返回:'ok' 已播放 / 'nokey' 没配置 / 'empty' 没有可读的话 / 'blocked' 被系统拦下(需要再点一下播放) */
+async function speak(text, c) {
+  if (!S.tts.key || !voiceId(c)) return 'nokey';
+  const clean = cleanForSpeech(text); if (!clean) return 'empty';
+  const ck = voiceId(c) + '|' + S.tts.model + '|' + clean; let url = voiceCache.get(ck);
+  if (!url) {
+    url = await AI.tts(S.tts, clean, voiceId(c)); voiceCache.set(ck, url);
+    if (voiceCache.size > 30) { const k = voiceCache.keys().next().value; URL.revokeObjectURL(voiceCache.get(k)); voiceCache.delete(k); }
   }
-  browserSpeak(text, c, loud);
+  player.src = url; player.volume = 1;
+  try { await player.play(); return 'ok'; } catch (e) { return 'blocked'; }
 }
 
 /* ================= 页面 ================= */
@@ -1033,7 +1025,7 @@ SCREENS.call = p => {
   let st = p.incoming ? 'ringing' : 'dialing', sec = 0, muted = false, spk = false, busy = false; const hist = [];
   return {
     html: header('通话') + `<div class="callbody ${st === 'connected' ? '' : 'ringing'}" id="cb">${avatar(c, 'xl')}<h2 style="margin:6px 0 0">${esc(c.name)}</h2>
-      <div class="soft" id="cs"></div><div class="cap" id="cap">&nbsp;</div><button class="replay" id="rp" style="display:none">🔊 再听一遍</button></div>
+      <div class="soft" id="cs"></div><div class="cap" id="cap">&nbsp;</div></div>
       <div class="ctrls" id="ct"></div>
       <form class="composer" id="cf" style="display:none"><input id="ci" placeholder="打字回复…" autocomplete="off"><button class="btn">发送</button></form>`,
     mount(el) {
@@ -1049,9 +1041,7 @@ SCREENS.call = p => {
           : btn('mute', muted ? '🔇' : '🔈', '静音', muted ? 'on' : '') + btn('spk', '📢', '免提', spk ? 'on' : '')
             + (SR ? btn('mic', '🎙', '说话') : '') + btn('hang', '✕', '挂断', 'red');
       }
-      let lastLine = '';
-      function say(text) { if (st !== 'connected') return; lastLine = text; cap.textContent = text; q(el, '#rp').style.display = 'inline-block'; if (!muted) speak(text, c, spk); }
-      q(el, '#rp').onclick = () => { primeSpeech(); if (lastLine) speak(lastLine, c, spk); };
+      function say(text) { if (st !== 'connected') return; cap.textContent = text; }
       async function turn(userText, hidden) {
         if (busy) return; busy = true;
         const h = hist.concat([{ r: 'user', c: userText }]);
@@ -1364,11 +1354,14 @@ SCREENS.settings = () => {
       ${fieldHtml(['b_key', 'API Key', 'text'], S.api.key).replace('type="text"', 'type="password"')}<button class="btn big" id="sa">保存</button></div>
     <div class="card"><h3>识图模型(看立绘用,可选)</h3><p class="soft">需要支持图片输入的模型。留空接口地址和 Key 则沿用上面的聊天接口。</p>
       ${fieldHtml(['v_base', '接口地址', 'text'], S.vision.base)}${fieldHtml(['v_model', '模型名', 'text'], S.vision.model)}${fieldHtml(['v_key', 'API Key', 'text'], S.vision.key).replace('type="text"', 'type="password"')}<button class="btn big" id="sv">保存</button></div>
-    <div class="card"><h3>角色语音</h3><label class="field"><span>朗读方式</span><select id="tm"><option value="browser" ${S.tts.mode === 'browser' ? 'selected' : ''}>手机自带朗读(所有角色声音相同)</option><option value="api" ${S.tts.mode === 'api' ? 'selected' : ''}>语音接口(每个角色有自己的音色)</option></select></label>
-      ${fieldHtml(['t_base', '语音接口地址', 'text'], S.tts.base)}${fieldHtml(['t_model', '语音模型', 'text'], S.tts.model)}${fieldHtml(['t_key', '语音 API Key', 'text'], S.tts.key).replace('type="text"', 'type="password"')}
-      <p class="soft">每个角色的音色(默认值适用于 SiliconFlow 的 CosyVoice2:alex、anna、bella、benjamin、charles、claire、david、diana,也可以填你自己克隆的音色)</p>
-      ${CHARACTERS.map(c => `<label class="field"><span>${esc(c.name)}</span><input data-voice="${c.id}" value="${esc((S.tts.voices && S.tts.voices[c.id]) || c.voice)}"></label>`).join('')}
-      <button class="btn big" id="st">保存语音设置</button><button class="btn ghost big" id="tt">试听一句</button></div>
+    <div class="card"><h3>角色语音(ElevenLabs)</h3>
+      <p class="soft">目前只有「陪伴」会让角色开口。每个角色填一个 Voice ID,留空就是不发声。</p>
+      ${fieldHtml(['t_key', 'ElevenLabs API Key', 'text'], S.tts.key).replace('type="text"', 'type="password"')}
+      <label class="field"><span>语音模型</span><select id="t_model"><option value="eleven_multilingual_v2" ${S.tts.model === 'eleven_multilingual_v2' ? 'selected' : ''}>eleven_multilingual_v2(音质最好)</option><option value="eleven_flash_v2_5" ${S.tts.model === 'eleven_flash_v2_5' ? 'selected' : ''}>eleven_flash_v2_5(更快更便宜)</option></select></label>
+      <label class="field"><span>稳定度 ${S.tts.stability}(越低越有情绪,越高越平稳)</span><input id="t_st" type="range" min="0" max="1" step="0.05" value="${S.tts.stability}"></label>
+      <label class="field"><span>相似度 ${S.tts.similarity}</span><input id="t_si" type="range" min="0" max="1" step="0.05" value="${S.tts.similarity}"></label>
+      ${CHARACTERS.map(c => `<label class="field"><span>${esc(c.name)} 的 Voice ID</span><input data-voice="${c.id}" value="${esc(voiceId(c))}" placeholder="留空 = 不发声"></label>`).join('')}
+      <button class="btn big" id="st">保存语音设置</button><button class="btn ghost big" id="tt">试听德拉科的声音</button></div>
     <div class="card"><h3>存档(不含 API Key)</h3><textarea id="ta" placeholder="导出的内容会出现在这里;导入时把存档粘贴到这里"></textarea>
       <button class="btn big" id="ex">导出存档</button><button class="btn big ghost" id="im">导入存档</button></div>
     <div class="card"><h3>账号</h3><button class="btn big danger" id="lo">退出登录(清除 Key)</button></div></div>`,
@@ -1400,10 +1393,14 @@ SCREENS.settings = () => {
       q(el, '#sv').onclick = () => { S.vision = { base: val('v_base').trim(), model: val('v_model').trim(), key: val('v_key').trim() }; save(); toast('已保存'); };
       const saveTts = () => {
         const voices = {}; el.querySelectorAll('[data-voice]').forEach(i => { if (i.value.trim()) voices[i.dataset.voice] = i.value.trim(); });
-        S.tts = { mode: q(el, '#tm').value, base: val('t_base').trim(), model: val('t_model').trim(), key: val('t_key').trim(), voices }; save();
+        S.tts = { key: val('t_key').trim(), model: q(el, '#t_model').value, stability: +q(el, '#t_st').value, similarity: +q(el, '#t_si').value, voices }; save();
       };
       q(el, '#st').onclick = () => { saveTts(); toast('语音设置已保存'); };
-      q(el, '#tt').onclick = () => { saveTts(); primeSpeech(); speak('今晚的月色真好,你说是不是?', CHARACTERS[0], true); };
+      q(el, '#tt').onclick = async () => {
+        saveTts(); primeSpeech(); const d = charById('draco'), b = q(el, '#tt'); b.disabled = true; b.textContent = '生成中…';
+        try { const r = await speak('哼,你居然真的来了。别站在那儿,过来坐吧。', d); toast(r === 'nokey' ? '先填好 Key 和德拉科的 Voice ID' : r === 'blocked' ? '被系统拦下了,再点一次' : '正在播放'); } catch (e) { toast(e.message); }
+        b.disabled = false; b.textContent = '试听德拉科的声音';
+      };
       q(el, '#ex').onclick = () => {
         const data = JSON.stringify(Object.assign({}, S, { api: Object.assign({}, S.api, { key: '' }), vision: Object.assign({}, S.vision, { key: '' }), tts: Object.assign({}, S.tts, { key: '' }) }));
         const ta = q(el, '#ta'); ta.value = data; ta.select(); toast('已导出,复制保存即可');
@@ -1818,21 +1815,31 @@ SCREENS.companion = () => ({
   mount(el) { el.querySelectorAll('.row').forEach(b => b.onclick = () => { primeSpeech(); go('companionroom', { id: b.dataset.id }); }); }
 });
 SCREENS.companionroom = p => {
-  const c = charById(p.id); let sec = 0, busy = false, last = 0;
+  const c = charById(p.id); let sec = 0, busy = false, last = 0, lastText = '';
+  const ready = () => S.tts.key && voiceId(c);
   return {
-    html: header('陪伴 · ' + c.name) + `<div class="callbody">${avatar(c, 'xl').replace('class="av ', 'id="tap" class="av ')}<h2 style="margin:6px 0 0">${esc(c.name)}</h2><div class="soft" id="tm">00:00</div><div class="cap" id="cap">轻轻点一下他的头像试试……</div></div>
+    html: header('陪伴 · ' + c.name) + `<div class="callbody">${avatar(c, 'xl').replace('class="av ', 'id="tap" class="av ')}<h2 style="margin:6px 0 0">${esc(c.name)}</h2><div class="soft" id="tm">00:00</div>
+      <div class="cap" id="cap">轻轻点一下头像试试……</div><button class="replay" id="rp" style="display:none">🔊 播放声音</button>
+      <div class="soft" id="vs" style="font-size:13px;min-height:20px">${ready() ? '' : '还没有给这个角色配置声音(设置 → 角色语音),现在只有文字'}</div></div>
       <form class="composer" id="f"><input id="t" placeholder="说点什么…" autocomplete="off"><button class="btn">发送</button></form>`,
     mount(el) {
-      const cap = q(el, '#cap'); every(() => { sec++; q(el, '#tm').textContent = pad2(Math.floor(sec / 60)) + ':' + pad2(sec % 60); }, 1000);
+      const cap = q(el, '#cap'), vs = q(el, '#vs'), rp = q(el, '#rp');
+      every(() => { sec++; q(el, '#tm').textContent = pad2(Math.floor(sec / 60)) + ':' + pad2(sec % 60); }, 1000);
       beforeBack = () => { stopSpeak(); if (sec >= 300) nudge(c, c.role === 'staff' ? 'trust' : 'intimacy', 1); return true; };
+      async function voice() {
+        if (!ready() || !lastText) return; vs.textContent = '正在生成声音…'; rp.style.display = 'none';
+        try { const r = await speak(lastText, c); vs.textContent = r === 'blocked' ? '系统拦下了自动播放,点“播放声音”收听' : ''; rp.style.display = 'inline-block'; }
+        catch (e) { vs.textContent = e.message; }
+      }
       async function say(userText, mode) {
-        if (busy) return; if (!aiOk()) return; busy = true;
+        if (busy || !aiOk()) return; busy = true;
         try {
           const out = await AI.ask({ char: c, card: S.card, house: S.house, rel: rel(c.id), hist: [{ r: 'user', c: userText }], api: S.api, mode, extra: playerCtx() });
-          cap.textContent = out.reply; applyDelta(c, out); if (S.tts.mode === 'api') speak(out.reply, c, true);
+          cap.textContent = out.reply; lastText = out.reply; applyDelta(c, out); busy = false; await voice();
         } catch (e) { toast(e.message); }
         busy = false;
       }
+      rp.onclick = () => { primeSpeech(); voice(); };
       q(el, '#tap').onclick = () => { if (Date.now() - last < 2500) return; last = Date.now(); primeSpeech(); say('(玩家轻轻戳了戳你)', 'touch'); };
       q(el, '#f').onsubmit = e => { e.preventDefault(); const v = q(el, '#t').value.trim(); if (!v) return; q(el, '#t').value = ''; primeSpeech(); say(v, 'chat'); };
     }
