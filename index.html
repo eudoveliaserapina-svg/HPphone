@@ -458,7 +458,7 @@ const Store = (() => {
     v: 2,
     api: { base: 'https://api.siliconflow.cn/v1', key: '', model: 'deepseek-ai/DeepSeek-V3' },
     vision: { base: '', key: '', model: '' },
-    tts: { key: '', model: 'eleven_multilingual_v2', stability: 0.5, similarity: 0.75, voices: {} },
+    tts: { key: '', model: 'eleven_multilingual_v2', stability: 0.5, similarity: 0.75, english: true, voices: {} },
     card: {}, seenLetter: false, house: null, sortedAt: 0, theme: 'common',
     rel: {}, chats: {}, fav: {},
     coins: 986, inv: {}, frogs: {}, rewards: {},
@@ -522,7 +522,9 @@ const AI = (() => {
       '2. ' + style,
       '3. 根据玩家这句话评估关系变化:友善、尊重、让你开心则上升;冒犯、敷衍、触碰底线则下降;普通寒暄可为 0。变化必须符合你的人设,范围是 -5 到 5 的整数。',
       staff ? '4. 你是教职工,intimacy 必须为 0,只有 trust 会变化。' : '',
-      '只输出一个 JSON 对象,不要代码块,格式:{"reply":"你说的话","intimacy":整数,"trust":整数}'
+      o.wantEn ? '5. 同时给出 en 字段:把 reply 里说出口的话译成自然的英文口语(符合你的人设和语气,英式口吻),不要包含动作描写。' : '',
+      o.wantEn ? '只输出一个 JSON 对象,不要代码块,格式:{"reply":"你说的话(中文)","en":"同一句话的英文版","intimacy":整数,"trust":整数}'
+        : '只输出一个 JSON 对象,不要代码块,格式:{"reply":"你说的话","intimacy":整数,"trust":整数}'
     ].filter(Boolean).join('\n');
   }
 
@@ -1363,6 +1365,7 @@ SCREENS.settings = () => {
       <p class="soft">目前只有「陪伴」会让角色开口。每个角色填一个 Voice ID,留空就是不发声。</p>
       ${fieldHtml(['t_key', 'ElevenLabs API Key', 'text'], S.tts.key).replace('type="text"', 'type="password"')}
       <label class="field"><span>语音模型</span><select id="t_model"><option value="eleven_multilingual_v2" ${S.tts.model === 'eleven_multilingual_v2' ? 'selected' : ''}>eleven_multilingual_v2(音质最好)</option><option value="eleven_flash_v2_5" ${S.tts.model === 'eleven_flash_v2_5' ? 'selected' : ''}>eleven_flash_v2_5(更快更便宜)</option></select></label>
+      <label class="row"><input type="checkbox" id="t_en" ${S.tts.english ? 'checked' : ''} style="width:22px;height:22px"><span class="grow">用英文朗读(角色会同时给出英文版,声音读英文;文字仍显示中文)</span></label>
       <label class="field"><span>稳定度 ${S.tts.stability}(越低越有情绪,越高越平稳)</span><input id="t_st" type="range" min="0" max="1" step="0.05" value="${S.tts.stability}"></label>
       <label class="field"><span>相似度 ${S.tts.similarity}</span><input id="t_si" type="range" min="0" max="1" step="0.05" value="${S.tts.similarity}"></label>
       ${CHARACTERS.map(c => `<label class="field"><span>${esc(c.name)} 的 Voice ID</span><input data-voice="${c.id}" value="${esc(voiceId(c))}" placeholder="留空 = 不发声"></label>`).join('')}
@@ -1398,12 +1401,12 @@ SCREENS.settings = () => {
       q(el, '#sv').onclick = () => { S.vision = { base: val('v_base').trim(), model: val('v_model').trim(), key: val('v_key').trim() }; save(); toast('已保存'); };
       const saveTts = () => {
         const voices = {}; el.querySelectorAll('[data-voice]').forEach(i => { if (i.value.trim()) voices[i.dataset.voice] = i.value.trim(); });
-        S.tts = { key: val('t_key').trim(), model: q(el, '#t_model').value, stability: +q(el, '#t_st').value, similarity: +q(el, '#t_si').value, voices }; save();
+        S.tts = { key: val('t_key').trim(), english: q(el, '#t_en').checked, model: q(el, '#t_model').value, stability: +q(el, '#t_st').value, similarity: +q(el, '#t_si').value, voices }; save();
       };
       q(el, '#st').onclick = () => { saveTts(); toast('语音设置已保存'); };
       q(el, '#tt').onclick = async () => {
         saveTts(); primeSpeech(); const d = charById('draco'), b = q(el, '#tt'); b.disabled = true; b.textContent = '生成中…';
-        try { const r = await speak('哼,你居然真的来了。别站在那儿,过来坐吧。', d); toast(r === 'nokey' ? '先填好 Key 和德拉科的 Voice ID' : r === 'blocked' ? '被系统拦下了,再点一次' : '正在播放'); } catch (e) { toast(e.message); }
+        try { const r = await speak(S.tts.english ? "Well, you actually came. Don't just stand there. Come and sit down." : '哼,你居然真的来了。别站在那儿,过来坐吧。', d); toast(r === 'nokey' ? '先填好 Key 和德拉科的 Voice ID' : r === 'blocked' ? '被系统拦下了,再点一次' : '正在播放'); } catch (e) { toast(e.message); }
         b.disabled = false; b.textContent = '试听德拉科的声音';
       };
       q(el, '#ex').onclick = () => {
@@ -1839,8 +1842,10 @@ SCREENS.companionroom = p => {
       async function say(userText, mode) {
         if (busy || !aiOk()) return; busy = true;
         try {
-          const out = await AI.ask({ char: c, card: S.card, house: S.house, rel: rel(c.id), hist: [{ r: 'user', c: userText }], api: S.api, mode, extra: playerCtx() });
-          cap.textContent = out.reply; lastText = out.reply; applyDelta(c, out); busy = false; await voice();
+          const out = await AI.ask({ char: c, card: S.card, house: S.house, rel: rel(c.id), hist: [{ r: 'user', c: userText }], api: S.api, mode, extra: playerCtx(), wantEn: !!(S.tts.english && ready()) });
+          const en = S.tts.english && out.en ? String(out.en) : '';
+          cap.innerHTML = esc(out.reply) + (en ? `<div class="soft" style="font-size:14px;margin-top:6px">${esc(en)}</div>` : '');
+          lastText = en || out.reply; applyDelta(c, out); busy = false; await voice();
         } catch (e) { toast(e.message); }
         busy = false;
       }
