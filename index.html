@@ -599,8 +599,13 @@ const AI = (() => {
       });
     } catch (e) { throw new Error('连不上 ElevenLabs(网络或跨域限制)'); }
     if (!res.ok) {
-      const code = res.status;
-      throw new Error(code === 401 ? 'ElevenLabs Key 不对或已失效' : code === 404 || code === 422 ? 'Voice ID 不对,或这个声音还没加入你的声音库' : code === 402 || code === 429 ? 'ElevenLabs 额度用完或请求太快' : 'ElevenLabs 返回 ' + code);
+      const code = res.status; let why = '';
+      try { const j = JSON.parse(await res.text()); const d = j.detail || j; why = (d.status || '') + (d.message ? ':' + d.message : ''); } catch (e) {}
+      const hint = code === 401 ? 'Key 不对,或没有开 Text to Speech 权限'
+        : code === 404 ? '找不到这个声音:Voice ID 填错了,或者这个声音不在这个 Key 所属账号的“My Voices”里'
+        : code === 422 ? 'Voice ID 的格式不对'
+        : code === 402 || code === 429 ? '额度用完、套餐不支持这个声音,或请求太快' : '';
+      throw new Error(('ElevenLabs ' + code + ' ' + hint + (why ? '(' + why.slice(0, 80) + ')' : '')).trim());
     }
     return URL.createObjectURL(await res.blob());
   }
