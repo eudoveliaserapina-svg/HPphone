@@ -394,7 +394,7 @@ const CARD_FIELDS = [
   ['family', '家族', 'text'],
   ['gender', '性别', 'select', ['男', '女', '其他']],
   ['age', '年龄', 'number'],
-  ['grade', '年级', 'grade'],
+  ['grade', '年级(与主角团同级,决定故事从哪一年开始)', 'grade'],
   ['appearance', '外貌', 'textarea'],
   ['height', '身高(cm)', 'text'],
   ['weight', '体重(kg)', 'text'],
@@ -484,7 +484,7 @@ const Store = (() => {
     api: { base: 'https://api.siliconflow.cn/v1', key: '', model: 'deepseek-ai/DeepSeek-V3' },
     vision: { base: '', key: '', model: '' },
     tts: { key: '', model: 'eleven_multilingual_v2', stability: 0.5, similarity: 0.75, english: true, voices: {} },
-    card: {}, seenLetter: false, house: null, sortedAt: 0, theme: 'common',
+    world: null, card: {}, seenLetter: false, house: null, sortedAt: 0, theme: 'common',
     rel: {}, chats: {}, fav: {}, charImg: {}, cool: {},
     coins: 986, inv: {}, frogs: {}, rewards: {},
     memos: [], todos: {}, visited: {}, bonus: {}, jobsDone: {}, divined: {},
@@ -508,6 +508,54 @@ const Store = (() => {
     catch (e) { console.warn('存档失败', e); return false; }
   }
   return { load, save, defaults };
+})();
+
+</script>
+<script>
+/* 世界时钟:游戏里的日期和时间,不再读手机的真实时钟。
+   时间只保存为“从起点经过的游戏分钟数”,日期、星期都由它推算。 */
+const World = (() => {
+  const DAY = 1440;
+  let last = null, savedAt = 0, timer = null, paused = false;
+
+  /* 没有存档时按角色卡的年级定起点:一年级 = 1991 年 9 月 1 日(和哈利同一年入学) */
+  function init() {
+    if (S.world && S.world.year0) { if (!S.world.dayMin) S.world.dayMin = 40; return; }
+    const g = Math.min(7, Math.max(1, +(S.card && S.card.grade) || 1));
+    S.world = { year0: 1990 + g, min: 0, dayMin: 40 };
+    S.sortedAt = 0; S.mailAt = {};          /* 旧存档里按真实时间记的冷却全部作废 */
+    Store.save(S);
+  }
+  const baseMs = () => Date.UTC(S.world.year0, 8, 1, 7, 0, 0);
+  /* 把“游戏分钟数”变成一个 Date,它的年月日时分(本地字段)就是游戏里的时间 */
+  function at(min) {
+    init(); const d = new Date(baseMs() + Math.floor(min) * 60000);
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), 0);
+  }
+  const min = () => { init(); return S.world.min; };
+  const now = () => at(min());
+  const label = () => { const d = now(); return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 星期${WEEK[d.getDay()]} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  function advance(m) { init(); S.world.min += m; Store.save(S); }
+  function sleep() {            /* 睡到第二天早上 7:00 */
+    const d = now(); let add = 7 * 60 - (d.getHours() * 60 + d.getMinutes()); if (add <= 0) add += DAY; advance(add); return add;
+  }
+  function setDayMin(n) { init(); S.world.dayMin = Math.max(5, +n || 40); Store.save(S); }
+  function start() {
+    if (timer) return; last = performance.now();
+    timer = setInterval(() => {
+      const t = performance.now();
+      /* 只在游戏开始后、页面可见、没有手动暂停时走时间 */
+      if (!document.hidden && !paused && S.card && S.card.name && S.house) {
+        const dt = Math.min(3, (t - last) / 1000);
+        init(); S.world.min += dt * (DAY / (S.world.dayMin * 60));
+        if (t - savedAt > 10000) { Store.save(S); savedAt = t; }
+      }
+      last = t;
+    }, 500);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) Store.save(S); last = performance.now(); });
+    window.addEventListener('pagehide', () => Store.save(S));
+  }
+  return { init, at, min, now, label, advance, sleep, setDayMin, start, pause: () => { paused = true; }, resume: () => { paused = false; }, isPaused: () => paused, DAY };
 })();
 
 </script>
@@ -539,7 +587,7 @@ const AI = (() => {
       `你正在一个哈利·波特同人手机应用里扮演「${c.name}」。`,
       `人设:${c.persona}`,
       `玩家角色:${cardText(o.card, o.house)}`,
-      `现在是:${new Date().toLocaleString('zh-CN')}`,
+      `现在是游戏世界里的:${World.label()}(故事发生在原著的时间线上)`,
       relText,
       o.extra || '',
       '规则:',
@@ -695,7 +743,7 @@ function applyTheme() {
     r.style.setProperty('--wp-home', 'url("' + WALL.home[t] + '")');
   } catch (e) {}
 }
-const dkey = d => { d = d || new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); };
+const dkey = d => { d = d || World.now(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); };
 function playerCtx() {
   const v = S.visited[dkey()] || [];
   return v.length ? '玩家今天去过:' + v.map(x => x.name + '(' + x.time + ')').join('、') + '。如果合适,可以自然地问起或评论。' : '';
@@ -773,7 +821,7 @@ function next() {
   root('lock');
 }
 function boot() {
-  applyTheme(); stack = [{ name: 'login' }];
+  World.start(); applyTheme(); stack = [{ name: 'login' }];
   if (S.api.key && S.card.name && S.seenLetter && S.house) root('lock'); else next();
 }
 
@@ -795,7 +843,7 @@ function collect(el, keys) {
 
 /* ---------- 桌面小组件(中号):今日课程 ---------- */
 function scheduleWidget() {
-  const d = new Date(); const rows = DAY_PLAN[d.getDay()];
+  const d = World.now(); const rows = DAY_PLAN[d.getDay()];
   const now = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
   let cur = -1; rows.forEach((r, i) => { if (r[0] <= now) cur = i; });
   const head = cur >= 0 ? rows[cur] : rows[0];
@@ -872,13 +920,13 @@ SCREENS.card = () => ({
     ${fieldHtml(CARD_FIELDS[3], S.card.gender)}
     ${fieldHtml(CARD_FIELDS[5], S.card.grade || 1)}
     ${fieldHtml(CARD_FIELDS[4], S.card.age || 11)}
-    <p class="tip">外貌、魔杖、背景等可以进入游戏后在「设置」里补充。</p>
+    <p class="tip">选“一年级”,故事从 1991 年 9 月 1 日开始(和哈利、罗恩、赫敏同一年入学);选更高的年级,故事会从对应的那一年开始。外貌、魔杖、背景等可以进入游戏后在「设置」里补充。</p>
     <button class="btn big" id="ok">收下通知书</button></div>`,
   mount(el) {
     q(el, '#ok').onclick = () => {
       const v = collect(el, ['name', 'gender', 'grade', 'age']);
       if (!v.name) return toast('请填写名字');
-      S.card = Object.assign({}, S.card, v); save(); next();
+      S.card = Object.assign({}, S.card, v); S.world = null; World.init(); save(); next();
     };
   }
 });
@@ -934,7 +982,7 @@ SCREENS.sort = p => {
         const max = Math.max(...Object.values(score));
         const top = Object.keys(score).filter(h => score[h] === max);
         const h = top[Math.floor(Math.random() * top.length)];
-        S.sortedAt = Date.now();
+        S.sortedAt = World.min();
         if (p.first || !S.house) {
           S.house = h; save();
           box.innerHTML = `<div class="result"><p class="soft">分院帽喊道——</p><h2 class="serif">${HOUSES[h].name}!</h2><p>${HOUSES[h].blurb}</p>
@@ -973,7 +1021,7 @@ SCREENS.lock = () => {
       const ov = q(el, '#ov');
       const tick = () => {
         if (!q(el, '#clk')) return;
-        const n = new Date();
+        const n = World.now();
         q(el, '#clk').textContent = pad2(n.getHours()) + ':' + pad2(n.getMinutes());
         q(el, '#dt').textContent = `${n.getMonth() + 1}月${n.getDate()}日 星期${WEEK[n.getDay()]}`;
       };
@@ -1005,7 +1053,7 @@ const iconSrc = id => { const t = ICONIMG[S.theme || 'common']; return id === 'j
 const appBtn = (id, label) => { const src = iconSrc(id);
   return `<button class="app" data-app="${id}">${src ? `<span class="ic img"><img src="${src}" alt=""></span>` : `<span class="ic fb">${svgIcon(id)}</span>`}${label ? `<span class="lb">${APPS.find(a => a[0] === id)[2]}</span>` : ''}</button>`; };
 SCREENS.home = () => {
-  const n = new Date();
+  const n = World.now();
   return {
     html: `<div class="home">
       <div class="owlbar"><button class="back" data-back>🔒 锁屏</button><span id="st"></span></div>
@@ -1016,8 +1064,9 @@ SCREENS.home = () => {
       <div class="dots" id="dots"><i class="on"></i><i></i></div>
       <div class="dock">${DOCK.map(id => appBtn(id, 0)).join('')}</div></div>`,
     mount(el) {
-      const t = () => { const d = new Date(); const s2 = q(el, '#st'); if (s2) s2.textContent = pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
-      t(); every(t, 15000);
+      const t = () => { const d = World.now(); const s2 = q(el, '#st'); if (s2) s2.textContent = pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
+      t(); every(t, 2000);
+      every(() => { const w = q(el, '.widget.wd:not(.cupw)'); if (w) w.outerHTML = scheduleWidget(); }, 8000);
       el.querySelectorAll('[data-app]').forEach(b => b.onclick = () => go(routeOf(b.dataset.app)));
       const pg = q(el, '#pg'), dots = el.querySelectorAll('#dots i');
       pg.addEventListener('scroll', () => {
@@ -1130,7 +1179,7 @@ SCREENS.call = p => {
 
 /* --- 日历(仿 iOS 系统日历,读取内置 HP 节日表) --- */
 SCREENS.calendar = () => {
-  const n = new Date(); let y = n.getFullYear(), m = n.getMonth() + 1;
+  const n = World.now(); let y = n.getFullYear(), m = n.getMonth() + 1;
   let sel = new Date(n.getFullYear(), n.getMonth(), n.getDate());
   const same = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
   return {
@@ -1168,9 +1217,9 @@ SCREENS.calendar = () => {
 
 /* --- 分院帽(每周只能测一次) --- */
 SCREENS.hat = () => {
-  const left = S.sortedAt + 7 * 864e5 - Date.now();
+  const left = S.sortedAt + 7 * 1440 - World.min();
   const ok = left <= 0;
-  const when = new Date(S.sortedAt + 7 * 864e5);
+  const when = World.at(S.sortedAt + 7 * 1440);
   return {
     html: header('分院帽') + `<div class="scroll"><div class="result"><div style="font-size:64px">🎩</div>
       <p class="soft">你现在是</p><h2 class="serif">${S.house ? HOUSES[S.house].name : '未分院'}</h2>
@@ -1211,7 +1260,7 @@ function nudge(c, key, v) {  /* 本地直接调整关系值(购物、兼职等�
   r[key] = nv; save(); toast(`${c.name}对你的${key === 'intimacy' ? '亲密度' : '信任度'}${real > 0 ? '提升x' + real : '下降x' + Math.abs(real)}`);
 }
 function addPoints(house, n) {
-  const d = new Date(), k = d.getFullYear() + '-' + (d.getMonth() + 1);
+  const d = World.now(), k = d.getFullYear() + '-' + (d.getMonth() + 1);
   S.bonus[k] = S.bonus[k] || {}; S.bonus[k][house] = (S.bonus[k][house] || 0) + n; save();
 }
 function fileToDataUrl(file, maxW, maxH, quality) {
@@ -1241,13 +1290,13 @@ function cupStandings(y, m, upto) {
   return tot;
 }
 function cupWidget() {
-  const n = new Date(); const t = cupStandings(n.getFullYear(), n.getMonth() + 1, n.getDate());
+  const n = World.now(); const t = cupStandings(n.getFullYear(), n.getMonth() + 1, n.getDate());
   const max = Math.max(...Object.values(t), 1);
   return `<div class="widget wd cupw"><div class="wd-l"><small>${n.getMonth() + 1}月 · 学院杯</small><div class="wd-big" style="font-size:20px">${HOUSES[Object.keys(t).sort((a, b) => t[b] - t[a])[0]].name}</div><small>目前领先</small></div>
     <div class="wd-r">${Object.keys(t).sort((a, b) => t[b] - t[a]).map(h => `<div class="slot"><span style="width:56px">${HOUSES[h].name}</span><i class="mini" style="width:${Math.round(t[h] / max * 70)}px"></i><time>${t[h]}</time></div>`).join('')}</div></div>`;
 }
 SCREENS.cup = () => {
-  const n = new Date(), y = n.getFullYear(), m = n.getMonth() + 1, last = new Date(y, m, 0).getDate();
+  const n = World.now(), y = n.getFullYear(), m = n.getMonth() + 1, last = new Date(y, m, 0).getDate();
   const t = cupStandings(y, m, n.getDate()), order = Object.keys(t).sort((a, b) => t[b] - t[a]), max = Math.max(...Object.values(t), 1);
   const pm = m === 1 ? 12 : m - 1, py = m === 1 ? y - 1 : y, pt = cupStandings(py, pm, new Date(py, pm, 0).getDate());
   const pc = Object.keys(pt).sort((a, b) => pt[b] - pt[a])[0];
@@ -1309,7 +1358,7 @@ SCREENS.chat = p => {
           const pool = CHARACTERS.filter(c => c.role === 'student' || Math.random() < 0.3).sort(() => Math.random() - 0.5).slice(0, 2);
           const j = await AI.json(S.api, '你要为哈利·波特同人手机的朋友圈生成动态。每个角色发一条符合人设的短动态(10 到 40 字),贴近当下的校园生活。格式:{"posts":[{"id":"角色id","text":"内容"}]}',
             '角色:\n' + pool.map(c => `${c.id}(${c.name}):${c.persona}`).join('\n'));
-          (j.posts || []).forEach(x => { if (charById(x.id) && x.text) S.moments.push({ author: x.id, text: x.text, time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(5, 16), likes: [], comments: [] }); });
+          (j.posts || []).forEach(x => { if (charById(x.id) && x.text) S.moments.push({ author: x.id, text: x.text, time: World.now().toLocaleString('zh-CN', { hour12: false }).slice(5, 16), likes: [], comments: [] }); });
           save(); render();
         } catch (e) { toast(e.message); rf.disabled = false; rf.textContent = '刷新朋友圈'; }
       };
@@ -1369,7 +1418,7 @@ SCREENS.momentnew = () => ({
   mount(el) {
     q(el, '#ok').onclick = async () => {
       const text = q(el, '#mt').value.trim(); if (!text) return toast('写点什么吧');
-      const m = { author: 'me', text, time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(5, 16), likes: [], comments: [] };
+      const m = { author: 'me', text, time: World.now().toLocaleString('zh-CN', { hour12: false }).slice(5, 16), likes: [], comments: [] };
       S.moments.push(m); save(); toast('已发布'); back();
       if (!S.api.key) return;
       try {
@@ -1399,6 +1448,10 @@ SCREENS.settings = () => {
       <button class="btn big" id="sc">保存角色卡</button></div>
     <div class="card"><h3>角色头像</h3><p class="soft">给每个角色传一张头像,聊天、陪伴、通话里都会显示。</p>
       ${CHARACTERS.map(c => `<div class="row">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b></span><label class="btn ghost" style="margin:0;padding:6px 12px">上传<input type="file" accept="image/*" data-cimg="${c.id}" hidden></label></div>`).join('')}</div>
+    <div class="card"><h3>游戏时间</h3><p class="soft" id="wl">${World.label()}</p>
+      <label class="field"><span>时间流速(游戏里的一天 = 现实多少分钟)</span><select id="wd">${[20, 30, 40, 60].map(n => `<option value="${n}" ${S.world && S.world.dayMin === n ? 'selected' : ''}>${n} 分钟</option>`).join('')}</select></label>
+      <button class="btn ghost big" id="wsl">睡到明天早上 7 点</button><button class="btn ghost big" id="wh">快进 1 小时</button><button class="btn ghost big" id="wp">${World.isPaused() ? '继续时间' : '暂停时间'}</button>
+      <p class="soft">时间只在小手机页面打开时流动,关掉页面就暂停。</p></div>
     <div class="card"><h3>AI 接口(聊天用)</h3>${fieldHtml(['b_base', '接口地址', 'text'], S.api.base)}${fieldHtml(['b_model', '模型名', 'text'], S.api.model)}
       ${fieldHtml(['b_key', 'API Key', 'text'], S.api.key).replace('type="text"', 'type="password"')}<button class="btn big" id="sa">保存</button></div>
     <div class="card"><h3>识图模型(看立绘用,可选)</h3><p class="soft">需要支持图片输入的模型。留空接口地址和 Key 则沿用上面的聊天接口。</p>
@@ -1428,6 +1481,10 @@ SCREENS.settings = () => {
         const f = inp.files[0]; if (!f) return;
         try { S.charImg = S.charImg || {}; S.charImg[inp.dataset.cimg] = await fileToDataUrl(f, 192, 192, 0.8); if (!save()) toast('图片太大,存不下'); else { toast('已更新头像'); render(); } } catch (e) { toast(e.message); }
       });
+      q(el, '#wd').onchange = e => { World.setDayMin(+e.target.value); toast('已改为 1 天 = ' + e.target.value + ' 分钟'); };
+      q(el, '#wsl').onclick = () => { World.sleep(); q(el, '#wl').textContent = World.label(); toast('你睡了一觉'); };
+      q(el, '#wh').onclick = () => { World.advance(60); q(el, '#wl').textContent = World.label(); };
+      q(el, '#wp').onclick = () => { if (World.isPaused()) World.resume(); else World.pause(); q(el, '#wp').textContent = World.isPaused() ? '继续时间' : '暂停时间'; };
       q(el, '#seeit').onclick = async () => {
         if (!S.card.portrait) return toast('先上传立绘');
         const cfg = { base: S.vision.base || S.api.base, key: S.vision.key || S.api.key, model: S.vision.model };
@@ -1472,7 +1529,7 @@ SCREENS.settings = () => {
 
 /* ===== 备忘录 ===== */
 function checkMemos() {
-  const now = Date.now(); let hit = false;
+  const now = World.now().getTime(); let hit = false;
   S.memos.forEach(m => { if (m.at && !m.fired && m.at <= now) { m.fired = true; hit = true; toast('📝 备忘录提醒:' + (m.title || m.body.slice(0, 20))); } });
   if (hit) save();
 }
@@ -1484,7 +1541,7 @@ SCREENS.memo = () => ({
 });
 SCREENS.memoedit = p => {
   const m = S.memos.find(x => x.id === p.id) || { id: 'm' + Date.now(), title: '', body: '' };
-  const dt = m.at ? new Date(m.at - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+  const dt = m.at ? new Date(m.at - new Date(m.at).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
   return {
     html: header('编辑备忘录') + `<div class="scroll"><label class="field"><span>标题</span><input id="ti" value="${esc(m.title)}"></label><label class="field"><span>内容</span><textarea id="bo" style="min-height:160px">${esc(m.body)}</textarea></label>
       <label class="field"><span>提醒时间(可不填)</span><input id="at" type="datetime-local" value="${dt}"></label><button class="btn big" id="ok">保存</button>${p.id ? '<button class="btn big danger" id="del">删除</button>' : ''}</div>`,
@@ -1503,7 +1560,7 @@ SCREENS.memoedit = p => {
 function todayTodos() {
   const k = dkey();
   if (!S.todos[k]) {
-    const r = rng(k + 'todo'), subs = DAY_PLAN[new Date().getDay()].map(x => x[1]).filter(x => SUBJECTS.includes(x)); const list = [];
+    const r = rng(k + 'todo'), subs = DAY_PLAN[World.now().getDay()].map(x => x[1]).filter(x => SUBJECTS.includes(x)); const list = [];
     (subs.length ? subs.slice(0, 2) : [pick(SUBJECTS, r)]).forEach(s => list.push({ t: pick(['完成{c}的作业', '复习{c}的笔记', '预习{c}的下一章'], r).replace('{c}', s), done: false }));
     const c = CHARACTERS[Math.floor(r() * CHARACTERS.length)];
     list.push({ t: `和${c.name}的约定:傍晚在${pick(LOCATIONS, r).name}见面`, done: false });
@@ -1515,7 +1572,7 @@ function todayTodos() {
 SCREENS.todo = () => {
   const list = todayTodos();
   return {
-    html: header('每日待办') + `<div class="scroll"><p class="soft">${new Date().getMonth() + 1}月${new Date().getDate()}日 · 每天会刷新</p>${list.map((t, i) => `<label class="row todo ${t.done ? 'done' : ''}"><input type="checkbox" data-i="${i}" ${t.done ? 'checked' : ''} style="width:22px;height:22px"><span class="grow">${esc(t.t)}${t.reward ? `<small style="color:var(--today)">完成可得 ${priceText(t.reward)}</small>` : ''}</span></label>`).join('')}
+    html: header('每日待办') + `<div class="scroll"><p class="soft">${World.now().getMonth() + 1}月${World.now().getDate()}日 · 每天会刷新</p>${list.map((t, i) => `<label class="row todo ${t.done ? 'done' : ''}"><input type="checkbox" data-i="${i}" ${t.done ? 'checked' : ''} style="width:22px;height:22px"><span class="grow">${esc(t.t)}${t.reward ? `<small style="color:var(--today)">完成可得 ${priceText(t.reward)}</small>` : ''}</span></label>`).join('')}
       <div style="display:flex;gap:8px;margin-top:12px"><input id="nt" placeholder="自己加一条…"><button class="btn" id="ad">添加</button></div></div>`,
     mount(el) {
       el.querySelectorAll('input[data-i]').forEach(c => c.onchange = () => {
@@ -1528,7 +1585,7 @@ SCREENS.todo = () => {
 
 /* ===== 兼职 ===== */
 SCREENS.job = () => {
-  const k = dkey(), done = S.jobsDone[k] || 0, wk = [0, 6].includes(new Date().getDay()), g = gradeNum();
+  const k = dkey(), done = S.jobsDone[k] || 0, wk = [0, 6].includes(World.now().getDay()), g = gradeNum();
   const card = j => `<div class="card"><b>${j.name}</b><div class="soft">${j.place} · ${j.boss} · 报酬 ${priceText(j.pay)}</div><p style="margin:6px 0">${j.desc}</p>
     <button class="btn" data-job="${j.id}">接下这份活</button></div>`;
   const normal = JOBS.filter(j => !j.grey && (j.place === '城堡' || (g >= 4 && wk)));
@@ -1587,7 +1644,7 @@ function whereIs(c, slot) {
   if (slot === 1 || slot === 3) return pick(['potions', 'transfig', 'greenhouse', 'library'], r);
   return pick(['library', 'pitch', 'lake', 'room', 'owlery', 'hall'], r);
 }
-function currentSlot() { const d = new Date(), t = d.getHours() * 60 + d.getMinutes(); let s = -1; SLOTS.forEach((x, i) => { const [h, m] = x[0].split(':'); if (t >= +h * 60 + +m) s = i; }); return t >= 22 * 60 ? -1 : s; }
+function currentSlot() { const d = World.now(), t = d.getHours() * 60 + d.getMinutes(); let s = -1; SLOTS.forEach((x, i) => { const [h, m] = x[0].split(':'); if (t >= +h * 60 + +m) s = i; }); return t >= 22 * 60 ? -1 : s; }
 SCREENS.map = () => {
   const slot = currentSlot(), vis = S.visited[dkey()] || [];
   const nodes = LOCATIONS.map(l => `<g class="node" data-loc="${l.id}"><circle cx="${l.x}" cy="${l.y}" r="5.2" fill="${vis.some(v => v.id === l.id) ? 'var(--today)' : 'var(--t0)'}" stroke="var(--glyph)" stroke-width="1"/><text x="${l.x}" y="${l.y + 1.6}" text-anchor="middle" font-size="5" fill="var(--glyph)">${vis.some(v => v.id === l.id) ? '✓' : '·'}</text><text x="${l.x}" y="${l.y + 10.5}" text-anchor="middle" font-size="4.2" fill="var(--ink)">${l.name}</text></g>`).join('');
@@ -1603,7 +1660,7 @@ SCREENS.map = () => {
           <button class="btn big" id="go">前往${l.name}</button><button class="btn big ghost" data-close>算了</button>`);
         m.querySelector('[data-close]').onclick = () => m.remove();
         m.querySelector('#go').onclick = () => {
-          const d = new Date(); (S.visited[dkey()] = S.visited[dkey()] || []).push({ id: l.id, name: l.name, time: pad2(d.getHours()) + ':' + pad2(d.getMinutes()) }); save(); m.remove();
+          const d = World.now(); (S.visited[dkey()] = S.visited[dkey()] || []).push({ id: l.id, name: l.name, time: pad2(d.getHours()) + ':' + pad2(d.getMinutes()) }); save(); m.remove();
           toast('你来到了' + l.name + (who.length ? ',' + who[0].name + '也在这里' : '')); render();
         };
       });
@@ -1727,7 +1784,7 @@ SCREENS.divine = () => {
 
 /* ===== 猫头鹰邮箱 ===== */
 async function maybeLetters() {
-  if (!S.api.key) return; S.mailAt = S.mailAt || {}; const now = Date.now(), DAY = 864e5;
+  if (!S.api.key) return; S.mailAt = S.mailAt || {}; const now = World.min(), DAY = 1440;
   for (const c of CHARACTERS) {
     const r = rel(c.id), last = S.mailAt[c.id] || 0;
     const ok = c.role === 'staff' ? r.trust >= 50 && now - last > 3 * DAY : (r.intimacy >= 35 && now - last > 3 * DAY) || (c.cheerful && r.intimacy >= 15 && now - last > 4 * DAY);
@@ -1735,7 +1792,7 @@ async function maybeLetters() {
     S.mailAt[c.id] = now; save();
     try {
       const out = await AI.ask({ char: c, card: S.card, house: S.house, rel: r, hist: [{ r: 'user', c: '(你想主动给玩家写一封信,说说近况,或者问候一下。)' }], api: S.api, mode: 'letter', extra: playerCtx() });
-      S.mail.push({ id: 'l' + now + c.id, from: c.id, dir: 'in', time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16), text: out.reply, read: false }); save(); toast('🦉 ' + c.name + '给你寄来了一封信');
+      S.mail.push({ id: 'l' + now + c.id, from: c.id, dir: 'in', time: World.now().toLocaleString('zh-CN', { hour12: false }).slice(0, 16), text: out.reply, read: false }); save(); toast('🦉 ' + c.name + '给你寄来了一封信');
     } catch (e) { S.mailAt[c.id] = last; save(); break; }
   }
 }
@@ -1762,7 +1819,7 @@ SCREENS.owlwrite = () => ({
     q(el, '#ok').onclick = async () => {
       const text = q(el, '#tx').value.trim(), c = charById(q(el, '#to').value); if (!text) return toast('信还是空的'); if (!aiOk()) return;
       const b = q(el, '#ok'); b.disabled = true; b.textContent = '猫头鹰出发了……';
-      const t = new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16);
+      const t = World.now().toLocaleString('zh-CN', { hour12: false }).slice(0, 16);
       S.mail.push({ id: 'o' + Date.now(), from: c.id, dir: 'out', time: t, text, read: true }); save();
       try {
         const out = await AI.ask({ char: c, card: S.card, house: S.house, rel: rel(c.id), hist: [{ r: 'user', c: '(玩家寄来一封信,请你回信)\n' + text }], api: S.api, mode: 'letter', extra: playerCtx() });
