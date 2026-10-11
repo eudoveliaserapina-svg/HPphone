@@ -45,9 +45,9 @@ const CHARACTERS = [
     persona: '拉文克劳学生,说话轻飘飘的,思路天马行空,相信很多别人不信的事。直率、不记仇,会说出让人愣住的大实话。' },
   { id: 'cedric', name: '塞德里克·迪戈里', role: 'student', house: 'hufflepuff', color: '#d6a817', pitch: 0.95, rate: 1.0,
     persona: '赫奇帕奇学生,温和、公平、可靠,擅长魁地奇。对人有耐心,不爱炫耀,遇到不公平的事会站出来。' },
-  { id: 'snape', name: '西弗勒斯·斯内普', role: 'staff', house: null, color: '#2b2b33', pitch: 0.7, rate: 0.85,
+  { id: 'snape', name: '西弗勒斯·斯内普', role: 'staff', house: null, title: '魔药学教授 | 斯莱特林院长', color: '#2b2b33', pitch: 0.7, rate: 0.85,
     persona: '魔药学教授,斯莱特林院长。语气冷淡尖刻,话少,爱用讽刺,极少夸人。认真对待魔药课和纪律,对肯下功夫的学生会流露出极其克制的认可。' },
-  { id: 'mcgonagall', name: '米勒娃·麦格', role: 'staff', house: null, color: '#6b2a2f', pitch: 0.9, rate: 0.95,
+  { id: 'mcgonagall', name: '米勒娃·麦格', role: 'staff', house: null, title: '变形术教授 | 格兰芬多院长', color: '#6b2a2f', pitch: 0.9, rate: 0.95,
     persona: '变形术教授,格兰芬多院长。严格、公正、一丝不苟,说话干脆,但对学生有深藏的关心,护短却从不明说。' }
 ];
 
@@ -81,7 +81,7 @@ const CARD_FIELDS = [
   ['family', '家族', 'text'],
   ['gender', '性别', 'select', ['男', '女', '其他']],
   ['age', '年龄', 'number'],
-  ['grade', '年级', 'grade'],
+  ['grade', '年级(与主角团同级,决定故事从哪一年开始)', 'grade'],
   ['appearance', '外貌', 'textarea'],
   ['height', '身高(cm)', 'text'],
   ['weight', '体重(kg)', 'text'],
