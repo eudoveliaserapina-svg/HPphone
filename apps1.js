@@ -409,16 +409,17 @@ SCREENS.map = () => {
   const slot = currentSlot(), vis = S.visited[dkey()] || [];
   const nodes = LOCATIONS.map(l => `<g class="node" data-loc="${l.id}"><circle cx="${l.x}" cy="${l.y}" r="5.2" fill="${vis.some(v => v.id === l.id) ? 'var(--today)' : 'var(--t0)'}" stroke="var(--glyph)" stroke-width="1"/><text x="${l.x}" y="${l.y + 1.6}" text-anchor="middle" font-size="5" fill="var(--glyph)">${vis.some(v => v.id === l.id) ? '✓' : '·'}</text><text x="${l.x}" y="${l.y + 10.5}" text-anchor="middle" font-size="4.2" fill="var(--ink)">${l.name}</text></g>`).join('');
   return {
-    html: header('霍格沃茨地图') + `<div class="scroll"><p class="soft">${slot < 0 ? '夜深了,大家都回宿舍休息了。' : `现在是「${SLOTS[slot][1]}」时段。点一个地点看看有谁在。每天都会刷新。`}</p>
+    html: header('霍格沃茨地图') + `<div class="scroll"><p class="soft">${slot < 0 ? '夜深了,大家都回宿舍休息了。你仍然可以自己去城堡里探索,只是不太建议。' : `现在是「${SLOTS[slot][1]}」时段。点一个地点看看有谁在。每天都会刷新。`}</p>
       <svg viewBox="0 0 100 110" class="mapsvg"><path d="M10 40 L30 10 L50 22 L70 8 L92 38 L96 70 L82 100 L28 100 L6 70Z" fill="var(--surface2)" stroke="var(--line)" stroke-width="1.2"/>${nodes}</svg>
       <div class="card"><h3>今天去过的地方</h3>${vis.length ? vis.map(v => `<div>${esc(v.time)} · ${esc(v.name)}</div>`).join('') : '<span class="soft">还没有去过任何地方。角色们会注意到你去了哪里。</span>'}</div></div>`,
     mount(el) {
       el.querySelectorAll('.node').forEach(n => n.onclick = () => {
         const l = LOCATIONS.find(x => x.id === n.dataset.loc);
-        const who = slot < 0 ? [] : CHARACTERS.filter(c => whereIs(c, slot) === l.id);
-        const m = modalOpen(`<h3>${l.name}</h3>${who.length ? who.map(c => `<div class="row">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b><small>${pick(l.acts, rng(dkey() + c.id + slot + 'a'))}</small></span></div>`).join('') : '<p class="soft">这里现在没有人。</p>'}
-          <button class="btn big" id="go">前往${l.name}</button><button class="btn big ghost" data-close>算了</button>`);
+        const who = slot < 0 ? [] : sceneCast(l.id, slot);
+        const m = modalOpen(`<h3>${l.name}</h3>${who.length ? who.map(c => `<div class="row" data-who="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b><small>${pick(l.acts, rng(dkey() + c.id + slot + 'a'))}</small></span></div>`).join('') : '<p class="soft">这里现在没有人。</p>'}
+          ${slot < 0 ? '<p class="soft" style="font-size:12px;margin:2px 0 8px">夜深了,不太建议在城堡里乱逛……</p>' : ''}${sceneOn(l.id) ? '<button class="btn big" id="sc">进入日常剧情</button>' : ''}<button class="btn big" id="go">前往${l.name}</button><button class="btn big ghost" data-close>算了</button>`);
         m.querySelector('[data-close]').onclick = () => m.remove();
+        if (sceneOn(l.id)) { m.querySelector('#sc').onclick = () => { m.remove(); sceneEnter(l.id); }; m.querySelectorAll('[data-who]').forEach(r => r.onclick = () => { m.remove(); sceneEnter(l.id, r.dataset.who); }); }
         m.querySelector('#go').onclick = () => {
           const d = World.now(); (S.visited[dkey()] = S.visited[dkey()] || []).push({ id: l.id, name: l.name, time: pad2(d.getHours()) + ':' + pad2(d.getMinutes()) }); save(); m.remove();
           toast('你来到了' + l.name + (who.length ? ',' + who[0].name + '也在这里' : '')); render();
