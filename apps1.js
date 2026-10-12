@@ -156,6 +156,7 @@ SCREENS.groupchat = p => {
 成员及人设:\n${mem.map(c => `${c.id}(${c.name}):${c.persona}`).join('\n')}
 各成员当前与玩家关系:${mem.map(c => `${c.name}亲密度${rel(c.id).intimacy}/信任度${rel(c.id).trust}`).join(';')}
 ${playerCtx()}
+${crossMemoryMulti(mem, 'group', { skipGroup: g.id })}
 让 1 到 3 位最合适的成员回复,每条 1 到 2 句,像群聊,可以互相接话。
 关系变化 changes 默认必须是空数组 []。只有玩家这句话真的触动了某位成员(明显让他开心、感动、被冒犯或被冷落)时,才给那一位成员 ±1 到 3 的变化,一次最多 1 位;普通闲聊、寒暄、玩笑一律不给变化。教职工 intimacy 必须为 0。
 格式:{"messages":[{"from":"角色id","text":"内容"}],"changes":[{"id":"角色id","intimacy":0,"trust":0}]}`,
@@ -417,10 +418,11 @@ SCREENS.map = () => {
         const l = LOCATIONS.find(x => x.id === n.dataset.loc);
         const who = slot < 0 ? [] : sceneCast(l.id, slot);
         const m = modalOpen(`<h3>${l.name}</h3>${who.length ? who.map(c => `<div class="row" data-who="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b><small>${pick(l.acts, rng(dkey() + c.id + slot + 'a'))}</small></span></div>`).join('') : '<p class="soft">这里现在没有人。</p>'}
-          ${slot < 0 ? '<p class="soft" style="font-size:12px;margin:2px 0 8px">夜深了,不太建议在城堡里乱逛……</p>' : ''}${sceneOn(l.id) ? '<button class="btn big" id="sc">进入日常剧情</button>' : ''}<button class="btn big" id="go">前往${l.name}</button><button class="btn big ghost" data-close>算了</button>`);
+          ${slot < 0 ? '<p class="soft" style="font-size:12px;margin:2px 0 8px">夜深了,不太建议在城堡里乱逛……</p>' : ''}<button class="btn big" id="go">进入</button><button class="btn big ghost" data-close>算了</button>`);
         m.querySelector('[data-close]').onclick = () => m.remove();
-        if (sceneOn(l.id)) { m.querySelector('#sc').onclick = () => { m.remove(); sceneEnter(l.id); }; m.querySelectorAll('[data-who]').forEach(r => r.onclick = () => { m.remove(); sceneEnter(l.id, r.dataset.who); }); }
+        if (sceneOn(l.id)) m.querySelectorAll('[data-who]').forEach(r => r.onclick = () => { m.remove(); sceneEnter(l.id); });
         m.querySelector('#go').onclick = () => {
+          if (sceneOn(l.id)) { m.remove(); sceneEnter(l.id); return; }      /* 进入 = 直接进入日常剧情 */
           const d = World.now(); (S.visited[dkey()] = S.visited[dkey()] || []).push({ id: l.id, name: l.name, time: pad2(d.getHours()) + ':' + pad2(d.getMinutes()) }); save(); m.remove();
           toast('你来到了' + l.name + (who.length ? ',' + who[0].name + '也在这里' : '')); render();
         };
