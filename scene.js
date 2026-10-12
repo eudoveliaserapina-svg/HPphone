@@ -26,7 +26,7 @@ function sceneCast(locId, slot) {
   if (slot < 0) return [];
   const cfg = SCENE_LOCS[locId];
   if (cfg && cfg.fixed) return cfg.fixed.map(charById).filter(Boolean);
-  return CHARACTERS.filter(c => whereIs(c, slot) === locId);
+  return CHARACTERS.filter(c => (!c.map || c.map.indexOf(locId) >= 0) && whereIs(c, slot) === locId);   /* c.map 限制角色能出现的地点 */
 }
 const sceneShort = c => { const p = c.name.split('·'); return c.role === 'staff' ? p[p.length - 1] : p[0]; };
 const sceneRelLine = c => { const r = rel(c.id); return c.role === 'staff' ? `信任度 ${r.trust}/100(教职工没有亲密度)` : `亲密度 ${r.intimacy}/100,信任度 ${r.trust}/100`; };
@@ -61,39 +61,80 @@ function sceneStripAgency(text, name) {
   return sents.filter(s => !head.test(s) && !inner.test(s)).join('').trim();
 }
 
-/* 解析 AI 返回的 JSON。角色只能是在场的人;选项最多 4 个;who 类型的选项必须指向在场角色 */
+/* 解析 AI 返回的 JSON。角色只能是在场的人;选项最多 4 个;who 类型的选项必须指向在场角色。
+   角色名认得很宽:id、中文名、姓或名、英文名(Draco / Draco Malfoy)都行。 */
+function sceneWho(v, cast) {
+  v = String(v || '').trim(); if (!v || v === '旁白' || v === 'narrator' || v === 'narration') return '';
+  const lv = v.toLowerCase();
+  const c = cast.find(x => x.id === v || x.id === lv) || cast.find(x => x.name === v || x.name.indexOf(v) >= 0 || v.indexOf(sceneShort(x)) >= 0 || lv.indexOf(x.id) >= 0);
+  return c ? c.id : null;                     /* null = 不在场的人,丢掉这一句 */
+}
 function sceneParse(text, cast) {
   let j = null; const a = text.indexOf('{'), b = text.lastIndexOf('}');
   if (a >= 0 && b > a) { try { j = JSON.parse(text.slice(a, b + 1)); } catch (e) { /* 兜底 */ } }
   const raw = j || { lines: [{ who: '', text: String(text).trim() }] };
-  const who = v => {
-    v = String(v || '').trim(); if (!v || v === '旁白' || v === 'narrator') return '';
-    let c = cast.find(x => x.id === v);
-    if (!c) c = cast.find(x => x.name === v || x.name.indexOf(v) >= 0 || v.indexOf(sceneShort(x)) >= 0);
-    return c ? c.id : null;                     /* null = 不在场的人,丢掉这一句 */
-  };
+  const arr = Array.isArray(raw.lines) ? raw.lines : Array.isArray(raw.dialogue) ? raw.dialogue : [];
   const lines = [];
-  (Array.isArray(raw.lines) ? raw.lines : []).forEach(l => {
-    const t = String((l && (l.text || l.t)) || '').trim(); if (!t) return;
-    const w = who(l && l.who); if (w === null) return;
+  arr.forEach(l => {
+    const t = String((l && (l.text || l.t || l.content || l.line)) || '').trim(); if (!t) return;
+    const w = sceneWho(l && (l.who || l.speaker || l.name || l.role), cast); if (w === null) return;
     lines.push({ who: w, t });
   });
   const cs = [];
   (Array.isArray(raw.choices) ? raw.choices : []).forEach(c => {
     const t = String((c && (c.text || c.t)) || c || '').trim(); if (!t || typeof c === 'number') return;
     let k = c && c.kind ? String(c.kind) : 'self', w = '';
-    if (k === 'who') { const r = who(c.who || c.target); if (r) w = r; else k = 'self'; }
+    if (k === 'who') { const r = sceneWho(c.who || c.target, cast); if (r) w = r; else k = 'self'; }
     if (k !== 'who' && k !== 'talk') k = 'self';
     cs.push({ t, k, who: w });
   });
-  return { lines, cs: cs.slice(0, 4), rel: raw.rel && typeof raw.rel === 'object' ? raw.rel : {}, allow: raw.allow_others === true };
+  return { lines, cs: cs.slice(0, 4), rel: raw.rel && typeof raw.rel === 'object' ? raw.rel : {}, allow: raw.allow_others === true, topic: String(raw.topic || '').trim().slice(0, 12) };
+}
+
+/* 节奏控制。开场只有旁白;去找谁就只有谁说话(其他人除非 AI 标了“必要”,最多插一句);
+   一段最多 3 句:1 句旁白 + 这位角色最多 2 句话。裁剪时优先保住“话”,不会再出现只剩动作描写的情况。 */
+function sceneShape(r, userText, focus) {
+  const all = r.lines;
+  if (!userText) { r.lines = all.filter(l => !l.who).slice(0, 2); return r; }
+  let extra = 0;
+  let kept = all.filter(l => { if (!l.who || l.who === focus) return true; if (r.allow && extra < 1) { extra++; return true; } return false; });
+  if (!kept.length) kept = all.slice(0, 2);
+  let out;
+  if (focus) {
+    const nar = kept.filter(l => !l.who).slice(0, 1), mine = kept.filter(l => l.who === focus).slice(0, 2), ex = kept.filter(l => l.who && l.who !== focus).slice(0, 1);
+    out = kept.filter(l => nar.indexOf(l) >= 0 || mine.indexOf(l) >= 0 || ex.indexOf(l) >= 0);
+  } else {
+    const nar = kept.filter(l => !l.who).slice(0, 2), ex = kept.filter(l => l.who).slice(0, 1);
+    out = kept.filter(l => nar.indexOf(l) >= 0 || ex.indexOf(l) >= 0);
+  }
+  r.lines = (out.length ? out : kept).slice(0, 3);
+  return r;
+}
+/* 两段话像不像(按相邻两个字比较),用来发现“车轱辘话” */
+function sceneSim(a, b) {
+  const g = t => { t = String(t).replace(/[\s,。!?!?、…“”"「」『』:;:;,.~~—-]/g, ''); const o = {}; for (let i = 0; i < t.length - 1; i++) o[t.substr(i, 2)] = 1; return o; };
+  const x = g(a), y = g(b), kx = Object.keys(x), ky = Object.keys(y);
+  if (!kx.length || !ky.length) return 0;
+  let n = 0; kx.forEach(k => { if (y[k]) n++; });
+  return n / (kx.length + ky.length - n);
+}
+/* 这一段合格吗?不合格就返回原因,会让 AI 重写一次 */
+function sceneCheck(r, userText, focus, log) {
+  if (!userText || !focus) return '';
+  const c = charById(focus), mine = r.lines.filter(l => l.who === focus);
+  if (!mine.length) return `没有写出${c ? c.name : '这位角色'}说的话,只有动作和神态。必须有至少一条 who 为 ${focus} 的台词,直接回应玩家刚才的选择。`;
+  const now = mine.map(l => l.t).join('');
+  const before = []; log.forEach(e => { if (e.k === 'b') sceneBeatLines(e).forEach(l => { if (l.who === focus) before.push(l.t); }); });
+  const rec = before.slice(-4);
+  if (rec.some(t => sceneSim(now, t) > 0.45)) return '和前面说过的话太像了(车轱辘话)。换一个新的话头,不要再用相同的内容和句式。';
+  return '';
 }
 
 /* 旧版存档里的记录格式也能读 */
 const sceneBeatLines = e => e.l || [{ who: '', t: e.n || '' }].concat((e.d || []).map(x => ({ who: x.who, t: x.t })));
 const sceneChoiceOf = c => typeof c === 'string' ? { t: c, k: 'self', who: '' } : c;
 
-function sceneSystem(loc, cfg, cast, slot, focus) {
+function sceneSystem(loc, cfg, cast, slot, focus, talk) {
   const c = S.card, g = PERSONA.grade(), night = slot < 0;
   const me = `${c.name || '玩家'}${c.gender ? '(' + c.gender + ')' : ''},${GRADES[Math.min(7, g) - 1]}${S.house ? '、' + HOUSES[S.house].name + '学生' : ''}。外貌:${c.look || c.appearance || '未设定'}`;
   const castTxt = cast.length
@@ -113,8 +154,10 @@ function sceneSystem(loc, cfg, cast, slot, focus) {
     playerCtx(),
     '在场角色(只有他们可以说话和行动):\n' + castTxt,
     pairs.length ? '在场角色之间的关系:\n' + pairs.join('\n') : '',
-    mem ? '在场角色记得的近况(来自群聊、私聊、别处的日常剧情;自然地用上,不要逐条复述):\n' + mem : '',
-    focus && charById(focus) ? `当前交谈对象:${charById(focus).name}。这一轮只写他/她和玩家之间的互动。` : '',
+    mem ? '在场角色记得的近况(来自群聊、私聊、别处的日常剧情;只有和当前话题直接相关时才用,无关就完全忽略,不要逐条复述):\n' + mem : '',
+    focus && charById(focus) ? `当前交谈对象:${charById(focus).name}(id:${focus})。这一轮只写他/她和玩家之间的互动。` : '',
+    talk && talk.topics.length ? `这段交谈已经聊过的话题:${talk.topics.join('、')}。不要再回到这些话题,每一轮都要换新的话头(可以从对方的另一面入手:家人、功课、别的人、眼前正在发生的事、对玩家的态度)。` : '',
+    talk ? `这是和他/她的第 ${talk.n} 次来回。` + (talk.n >= 3 ? '这段交谈到此为止:让他/她用一句话或一个动作自然收尾(有事要走、被叫走、转回自己的事、懒得再聊),选项里不要再给 talk,改给 self,或 who 去找别人。' : '') : '',
     '本轮写什么(日常剧情要短,宁可少写,不要凑字数):',
     night
       ? '- 现在是宵禁后的深夜,没有任何你可以扮演的角色在场。如果最后一条消息是“新的一幕”(开场):只用旁白(who 为空)写 1~2 条,用“目光所及……”这类镜头式写法交代走廊或这个地点深夜的样子,加一处值得留意的细节(远处的声响、画像的低语、月光下的物件)。不要让玩家被抓或受伤,不要引入有名有姓的新角色。选项全部是 kind=self。之后玩家做出选择时,把选择当作已经发生的事实,用 1~2 条旁白写环境的变化,选项依然全部是 self。'
@@ -132,8 +175,10 @@ function sceneSystem(loc, cfg, cast, slot, focus) {
     '3. 只有「在场角色」可以说话;不要引入有名有姓的新角色,也不要让不在场的角色出场。',
     '4. 这里只是日常小场景:不改写原著的重要事件,不引入大事件或重大的原创剧情。',
     '5. 玩家是学生,互动保持适龄、非露骨,不写亲密的身体接触。',
-    '6. rel:只有玩家上一步真的触动了某位角色,才给出变化(整数,一般 1~3,极少数 5,可以为负);普通寒暄和开场一律为空。教职工只有 trust。',
-    '只输出一个 JSON,不要代码块:{"lines":[{"who":"","text":"旁白"},{"who":"角色id","text":"这位角色说的话"}],"choices":[{"text":"选项","kind":"who|talk|self","who":"kind 为 who 时填角色id"}],"allow_others":false,"rel":{"角色id":{"intimacy":0,"trust":0}}}'
+    '6. 角色的话必须直接回应玩家刚选的那句话或动作(哪怕是嘴硬、反问、挖苦地回应),不能自说自话,也不能无视对方。角色的爱好和标志性话题(比如魁地奇)在一段交谈里最多提一次。',
+    '7. 在“去找某位角色(who)”和“继续交谈(talk)”的轮次,lines 里必须有至少一条这位角色说的话(who 填角色 id,例如 draco,不要填名字);旁白只写一条,不超过 40 字,不要只有动作和神态。',
+    '8. rel:只有玩家上一步真的触动了某位角色,才给出变化(整数,一般 1~3,极少数 5,可以为负);普通寒暄和开场一律为空。教职工只有 trust。',
+    '只输出一个 JSON,不要代码块:{"lines":[{"who":"","text":"旁白"},{"who":"角色id","text":"这位角色说的话"}],"choices":[{"text":"选项","kind":"who|talk|self","who":"kind 为 who 时填角色id"}],"allow_others":false,"topic":"本轮话题,不超过 8 个字","rel":{"角色id":{"intimacy":0,"trust":0}}}'
   ].filter(Boolean).join('\n');
 }
 
@@ -293,29 +338,39 @@ SCREENS.scene = p => {
         if (busy || !aiOk()) return;
         busy = true;
         const focus = choice ? (choice.k === 'who' ? choice.who : choice.k === 'talk' ? (sc.focus || '') : '') : '';
+        /* 这段交谈的进度:第几次来回、聊过什么话题 */
+        const talk = !choice || !focus ? null : choice.k === 'who' || !sc.talk || sc.talk.who !== focus ? { who: focus, n: 1, topics: [] } : { who: focus, n: sc.talk.n + 1, topics: sc.talk.topics.slice() };
         const pend = userText ? { k: 'u', t: userText } : null;
         if (pend) sc.log.push(pend);
         const prev = sc.cur; waiting(true);
         const rollback = () => { if (pend) { const i = sc.log.indexOf(pend); if (i >= 0) sc.log.splice(i, 1); } };
         try {
           const cs = cast();
-          const text = await AI.raw(S.api, sceneMsgs(sceneSystem(loc, cfg, cs, slot0, focus), sc.log), 1.0);
-          if (!alive) { rollback(); save(); busy = false; return; }
-          const r = sceneParse(text, cs);
-          /* 节奏控制:开场只有旁白;去找谁就只有谁说话;其他人除非 AI 明确标了“必要”,最多插一句;每段最多 3 句 */
-          if (!userText) r.lines = r.lines.filter(l => !l.who);
-          else {
-            const all = r.lines; let extra = 0;
-            const kept = all.filter(l => { if (!l.who || l.who === focus) return true; if (r.allow && extra < 1) { extra++; return true; } return false; });
-            r.lines = kept.length ? kept : all.slice(0, 2);
+          let r = null, why = '';
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const msgs = sceneMsgs(sceneSystem(loc, cfg, cs, slot0, focus, talk), sc.log);
+            if (attempt) msgs[msgs.length - 1].content += '\n(上一版不合格:' + why + '请重写这一段。)';
+            const text = await AI.raw(S.api, msgs, 1.0);
+            if (!alive) { rollback(); save(); busy = false; return; }
+            r = sceneShape(sceneParse(text, cs), userText, focus);
+            r.lines = r.lines.map(l => l.who ? l : { who: '', t: sceneStripAgency(l.t, S.card.name) }).filter(l => l.t);
+            why = sceneCheck(r, userText, focus, sc.log.slice(0, sc.log.length - (pend ? 1 : 0)));
+            if (!why) break;                       /* 第二次还不合格也照用,不再卡住玩家 */
           }
-          r.lines = r.lines.slice(0, 3);
-          r.lines = r.lines.map(l => l.who ? l : { who: '', t: sceneStripAgency(l.t, S.card.name) }).filter(l => l.t);
           if (!r.lines.length) throw new Error('AI 没有返回可用的内容,再试一次');
-          if (!r.cs.length) r.cs = cs.slice(0, 3).map(c => ({ t: '去找' + sceneShort(c) + '说话', k: 'who', who: c.id })).concat([{ t: '环顾四周,看看还有什么', k: 'self', who: '' }]).slice(0, 4);
+          /* 交谈到第 3 次来回就该收尾:不再给“继续聊”的选项 */
+          if (talk && talk.n >= 3) {
+            r.cs = r.cs.filter(c => c.k !== 'talk');
+            if (!r.cs.some(c => c.k === 'who')) r.cs = r.cs.concat(cs.filter(c => c.id !== focus).slice(0, 2).map(c => ({ t: '去找' + sceneShort(c) + '说话', k: 'who', who: c.id }))).slice(0, 4);
+          }
+          if (!r.cs.length) {
+            const others = cs.filter(c => c.id !== focus).slice(0, 2).map(c => ({ t: '去找' + sceneShort(c) + '说话', k: 'who', who: c.id }));
+            r.cs = others.concat([{ t: focus ? '转身去做自己的事' : '环顾四周,看看还有什么', k: 'self', who: '' }]);
+          }
           sc.log.push({ k: 'b', l: r.lines, cs: r.cs });
           sc.log = sc.log.slice(-40);
           sc.cur = { lines: r.lines, cs: r.cs, li: 0 }; sc.focus = focus;
+          sc.talk = talk ? { who: focus, n: talk.n, topics: talk.topics.concat(r.topic ? [r.topic] : []).slice(-6) } : null;
           if (userText) Object.keys(r.rel).forEach(id => { const c = charById(id); if (c && sc.cast.indexOf(id) >= 0) applyDelta(c, r.rel[id]); });
           save(); busy = false; showLine();
         } catch (e) {
