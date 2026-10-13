@@ -33,9 +33,11 @@ const sceneRelLine = c => { const r = rel(c.id); return c.role === 'staff' ? `�
 
 /* 进入场景:和地图的“前往”一样记一笔“今天去过”,然后跳转。进场永远先是旁白,所以不需要指定人物。 */
 function sceneEnter(locId) {
-  const l = LOCATIONS.find(x => x.id === locId), d = World.now();
+  const st = typeof PLACES !== 'undefined' ? PLACES.locStatus(locId) : { ok: true };
+  if (!st.ok) return toast(st.why);                                  /* 出入规则:不是周末/不是假期/年级不够 都进不去 */
+  const l = LOCATIONS.find(x => x.id === locId), d = World.now(), cfg = SCENE_LOCS[locId] || {};
   (S.visited[dkey()] = S.visited[dkey()] || []).push({ id: l.id, name: l.name, time: pad2(d.getHours()) + ':' + pad2(d.getMinutes()) });
-  save(); go('scene', { loc: locId });
+  save(); go(cfg.action === 'bank' ? 'bank' : 'scene', { loc: locId });   /* 古灵阁直接进银行 */
 }
 
 /* 文字太长就分成多个对话框:按句子装,装不下换下一个框 */
@@ -135,7 +137,7 @@ const sceneBeatLines = e => e.l || [{ who: '', t: e.n || '' }].concat((e.d || []
 const sceneChoiceOf = c => typeof c === 'string' ? { t: c, k: 'self', who: '' } : c;
 
 function sceneSystem(loc, cfg, cast, slot, focus, talk) {
-  const c = S.card, g = PERSONA.grade(), night = slot < 0;
+  const c = S.card, g = PERSONA.grade(), night = slot < 0, hog = !loc.area || loc.area === 'hogwarts';
   const me = `${c.name || '玩家'}${c.gender ? '(' + c.gender + ')' : ''},${GRADES[Math.min(7, g) - 1]}${S.house ? '、' + HOUSES[S.house].name + '学生' : ''}。外貌:${c.look || c.appearance || '未设定'}`;
   const castTxt = cast.length
     ? cast.map(x => `- ${x.id}|${x.name}:${PERSONA.has(x.id) ? x.personaCore() : x.persona}\n  与玩家的关系:${sceneRelLine(x)}`).join('\n')
@@ -149,7 +151,7 @@ function sceneSystem(loc, cfg, cast, slot, focus, talk) {
   return [
     '你是一部哈利·波特同人「乙女向橙光文游」日常小场景的叙事者。画面是视觉小说:你写的内容会被拆成一句一句,显示在屏幕底部的对话框里;玩家只能点击你给出的选项,不能自由输入。',
     `现在是游戏世界里的:${World.label()}(第 ${g} 学年,故事发生在原著时间线上;只写这个时间点之前已经发生的事,不预知未来)。`,
-    `地点:${loc.name}。${cfg.desc || ''}时段:${night ? '深夜' : SLOTS[slot][1]}。`,
+    `地点:${loc.name}(${typeof PLACES !== 'undefined' ? PLACES.areaName(loc.area || 'hogwarts') : '霍格沃茨'})。${cfg.desc || ''}时段:${night ? '深夜' : SLOTS[slot][1]}。`,
     `玩家角色:${me}`,
     playerCtx(),
     '在场角色(只有他们可以说话和行动):\n' + castTxt,
@@ -160,9 +162,9 @@ function sceneSystem(loc, cfg, cast, slot, focus, talk) {
     talk ? `这是和他/她的第 ${talk.n} 次来回。` + (talk.n >= 3 ? '这段交谈到此为止:让他/她用一句话或一个动作自然收尾(有事要走、被叫走、转回自己的事、懒得再聊),选项里不要再给 talk,改给 self,或 who 去找别人。' : '') : '',
     '本轮写什么(日常剧情要短,宁可少写,不要凑字数):',
     night
-      ? '- 现在是宵禁后的深夜,没有任何你可以扮演的角色在场。如果最后一条消息是“新的一幕”(开场):只用旁白(who 为空)写 1~2 条,用“目光所及……”这类镜头式写法交代走廊或这个地点深夜的样子,加一处值得留意的细节(远处的声响、画像的低语、月光下的物件)。不要让玩家被抓或受伤,不要引入有名有姓的新角色。选项全部是 kind=self。之后玩家做出选择时,把选择当作已经发生的事实,用 1~2 条旁白写环境的变化,选项依然全部是 self。'
+      ? `- 现在是${hog ? '宵禁后的' : ''}深夜,没有任何你可以扮演的角色在场。如果最后一条消息是“新的一幕”(开场):只用旁白(who 为空)写 1~2 条,用“目光所及……”这类镜头式写法交代这个地点深夜的样子,加一处值得留意的细节(${hog ? '远处的声响、画像的低语、月光下的物件' : '打烊的店铺、远处的灯火、风声'})。不要让玩家被抓或受伤,不要引入有名有姓的新角色。选项全部是 kind=self。之后玩家做出选择时,把选择当作已经发生的事实,用 1~2 条旁白写环境的变化,选项依然全部是 self。`
       : [
-        '- 如果最后一条消息是“新的一幕”,这是【开场】:只用旁白(who 为空)写 1~2 条,合计不超过 110 字,用“目光所及……”这类镜头式写法交代:这个地点此刻的样子(一笔带过);在场的角色各自在做什么(每人一句,在场超过 3 位时只挑 3 位写);至多一件值得留意的小物件。不要让任何角色说话,不要写玩家做了什么、想了什么、感受如何。选项:对写进旁白的每位角色各给一个 kind=who 的选项(例如“走向德拉科,看看他在做什么”),最多 3 个;还有空位就给一个 kind=self 的选项(玩家自己做点别的,例如“在长桌边找个位置坐下”),总数不超过 4。',
+        '- 如果最后一条消息是“新的一幕”,这是【开场】:只用旁白(who 为空)写 1~2 条,合计不超过 110 字,用“目光所及……”这类镜头式写法交代:这个地点此刻的样子(一笔带过);在场的角色各自在做什么(每人一句,在场超过 3 位时只挑 3 位写);至多一件值得留意的小物件。不要让任何角色说话,不要写玩家做了什么、想了什么、感受如何。选项:对写进旁白的每位角色各给一个 kind=who 的选项(例如“走向德拉科,看看他在做什么”),最多 3 个;还有空位就给一个 kind=self 的选项(玩家自己做点别的,例如“在长桌边找个位置坐下”),总数不超过 4。在场没有任何角色时(比如玩家自己的庄园),选项全部是 kind=self,给 3 个,写成玩家在这个地方可以做的事。',
         '- 否则,玩家刚刚做出了选择(消息里“玩家选择:”后面就是选项原文),把它当作已经发生的事实,不要扩写玩家的动作。按选项类型写,每一段最多 3 条 lines:',
         '  · 去找某位角色(who):0~1 条旁白(他/她的动作神态)+ 1~2 条【这一位角色】的话,每条不超过 40 字。其他在场角色不出现、不插话、不被提起;只有玩家的举动直接牵涉到某个人时,才可以让那个人说一句,并把 allow_others 设为 true。',
         '  · 继续交谈(talk):还是同一位角色,1~2 条话,不超过 40 字。必须往前推进:接住玩家刚说的,给出新的信息、新的反应或新的话头;前面已经说过的内容、用过的句式和口头禅不要再出现。',
@@ -281,7 +283,7 @@ SCREENS.scene = p => {
     html: `<div class="vn ${slot0 < 0 ? 'night' : ''}" id="vn">
       <div class="vn-bg" id="bg"></div><div class="vn-shade"></div><div class="vn-dim"></div>
       <div class="vn-top"><button class="vn-btn" data-back>‹ 返回小手机</button>
-        <div class="vn-place">${esc(loc.name)} · ${slot0 < 0 ? '深夜' : SLOTS[slot0][1]}${slot0 < 0 ? '<small>夜深了,不太建议在城堡里乱逛……</small>' : ''}</div>
+        <div class="vn-place">${esc(loc.name)} · ${slot0 < 0 ? '深夜' : SLOTS[slot0][1]}${slot0 < 0 ? '<small>' + esc(typeof PLACES !== 'undefined' ? PLACES.nightHint(loc) : '夜深了,不太建议在城堡里乱逛……') + '</small>' : ''}</div>
         <button class="vn-btn" id="blog">回顾</button></div>
       <div class="vn-stage" id="stage"></div>
       <div class="vn-choices" id="chs"></div>

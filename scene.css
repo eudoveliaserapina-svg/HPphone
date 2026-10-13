@@ -56,3 +56,14 @@
 .lg-c { font-size: 14px; line-height: 1.7; margin: 0 0 8px; padding-left: 10px; border-left: 3px solid var(--c, #aaa); }
 .lg-c b { display: block; font-size: 12px; opacity: .75; }
 .lg-u { font-size: 14px; line-height: 1.6; margin: 0 0 8px; color: #ffc9e8; text-align: right; }
+
+/* 地图:区域标签 */
+.area-tabs { display: flex; gap: 6px; padding: 8px 12px 0; overflow-x: auto; flex: none; -webkit-overflow-scrolling: touch; }
+.area-tab { flex: none; padding: 8px 14px; border-radius: 999px; border: 2px solid var(--line); background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 700; white-space: nowrap; }
+.area-tab.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.area-tab.lock { opacity: .55; }
+.area-why { font-size: 12px; line-height: 1.8; margin: -2px 0 12px; }
+/* 古灵阁 */
+.bank-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; }
+.bank-row .btn { flex: 1; min-width: 28%; padding: 10px 6px; }
+.bank-row input { flex: 2 1 40%; min-width: 0; padding: 10px; border: 2px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: 16px; }
