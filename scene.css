@@ -67,3 +67,7 @@
 .bank-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; }
 .bank-row .btn { flex: 1; min-width: 28%; padding: 10px 6px; }
 .bank-row input { flex: 2 1 40%; min-width: 0; padding: 10px; border: 2px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: 16px; }
+
+.vn-opt.leave { margin-top: 6px; font-size: 14px; background: rgba(34, 26, 56, .78); border-color: rgba(255,255,255,.4); }
+
+.story-card { border: 2px solid var(--accent); }

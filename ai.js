@@ -4,7 +4,7 @@ const AI = (() => {
     const bits = [];
     if (card.name) bits.push('名字:' + card.name);
     if (card.gender) bits.push('性别:' + card.gender);
-    if (card.grade) bits.push('年级:' + GRADES[(+card.grade || 1) - 1]);
+    if (card.grade) { const g = typeof curGrade === 'function' ? curGrade() : (+card.grade || 1); bits.push('年级:' + GRADES[g - 1] + '(和哈利、赫敏同年级,' + (10 + g) + ' 岁)'); }
     if (house) bits.push('学院:' + HOUSES[house].name);
     [['family', '家族'], ['appearance', '外貌'], ['look', '从立绘看到的外貌'], ['skill', '擅长'], ['bio', '背景']].forEach(([k, label]) => {
       if (card[k]) bits.push(label + ':' + card[k]);
@@ -32,7 +32,7 @@ const AI = (() => {
       '1. 始终保持角色,不要提到自己是 AI 或在扮演。',
       '2. ' + style,
       '3. 关系变化要克制:绝大多数普通对话(寒暄、闲聊、日常提问)的 intimacy 和 trust 都应该是 0。只有玩家这句话真的触动了你(明显让你开心、感动、被冒犯、被冷落,或符合/违背你的底线)才变化,幅度 1 到 3,极少数情况才到 5。不要每句话都加分或扣分。',
-      staff ? '4. 你是教职工,intimacy 必须为 0,只有 trust 会变化。' : '',
+      staff ? '4. 你是教职工(老师),intimacy 必须为 0,只有 trust 会变化。你是老师,不是学生:不会被要求重做作业、被扣分、被罚抄,也不要说自己在上课交作业这类学生才有的事。' : '',
       o.wantEn ? '5. 同时给出 en 字段:把 reply 里说出口的话译成自然的英文口语(符合你的人设和语气,英式口吻),不要包含动作描写。' : '',
       o.wantEn ? '只输出一个 JSON 对象,不要代码块,格式:{"reply":"你说的话(中文)","en":"同一句话的英文版","intimacy":整数,"trust":整数}'
         : '只输出一个 JSON 对象,不要代码块,格式:{"reply":"你说的话","intimacy":整数,"trust":整数}'

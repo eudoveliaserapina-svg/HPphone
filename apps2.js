@@ -113,7 +113,7 @@ SCREENS.divine = () => {
 /* ===== 猫头鹰邮箱 ===== */
 async function maybeLetters() {
   if (!S.api.key) return; S.mailAt = S.mailAt || {}; const now = World.min(), DAY = 1440;
-  for (const c of CHARACTERS) {
+  for (const c of contactList()) {
     const r = rel(c.id), last = S.mailAt[c.id] || 0;
     const ok = c.role === 'staff' ? r.trust >= 50 && now - last > 3 * DAY : (r.intimacy >= 35 && now - last > 3 * DAY) || (c.cheerful && r.intimacy >= 15 && now - last > 4 * DAY);
     if (!ok) continue;
@@ -141,7 +141,7 @@ SCREENS.owl = p => {
   };
 };
 SCREENS.owlwrite = () => ({
-  html: header('写信') + `<div class="scroll"><label class="field"><span>寄给</span><select id="to">${CHARACTERS.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
+  html: header('写信') + `<div class="scroll"><label class="field"><span>寄给</span><select id="to">${contactList().map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
     <textarea id="tx" style="min-height:200px" placeholder="展信佳……"></textarea><button class="btn big" id="ok">交给猫头鹰</button></div>`,
   mount(el) {
     q(el, '#ok').onclick = async () => {
@@ -163,16 +163,19 @@ SCREENS.forum = p => {
   const bd = p.board || 'house', posts = (S.forum[bd + ':' + (bd === 'house' ? S.house : 'all')] || []).slice().reverse();
   const key = bd + ':' + (bd === 'house' ? S.house : 'all');
   const author = x => x.author === 'me' ? (x.anon ? '匿名巫师(你)' : S.card.name) : x.anon ? '匿名巫师' : idToName(x.author);
+  /* 不是联系人、已经登场、没有匿名的同学,旁边显示“加为联系人” */
+  const addBtn = x => (x.author !== 'me' && !x.anon && charById(x.author) && avail(charById(x.author)) && !isContact(x.author)) ? ` <button class="btn ghost" data-addc="${x.author}" style="padding:2px 10px;font-size:12px;margin:0">加为联系人</button>` : '';
   return {
     html: header('论坛', '<button class="btn" id="np" style="padding:6px 12px">发帖</button>') + `<div class="tabs">${boardList().map(b => `<button class="${b[0] === bd ? 'on' : ''}" data-b="${b[0]}">${b[1]}</button>`).join('')}</div>
       <div class="scroll"><button class="btn ghost big" id="rf" style="margin:0 0 12px">刷新帖子</button><p class="tip" style="margin-top:0">${bd === 'house' ? '只有本学院的人看得到这里。' : '全校可见。'}</p>
-      ${posts.length ? posts.map(x => `<div class="card post" data-pid="${x.id}"><b>${esc(x.title)}</b><div class="soft" style="font-size:13px">${esc(author(x))} · ${esc(x.time)}</div><p style="white-space:pre-wrap">${esc(x.text)}</p>
-        ${(x.replies || []).slice(0, 2).map(r => `<div class="mcm"><b>${esc(author(r))}</b>:${esc(r.text)}</div>`).join('')}
-        <div class="more" style="display:none">${(x.replies || []).slice(2).map(r => `<div class="mcm"><b>${esc(author(r))}</b>:${esc(r.text)}</div>`).join('')}</div>
+      ${posts.length ? posts.map(x => `<div class="card post" data-pid="${x.id}"><b>${esc(x.title)}</b><div class="soft" style="font-size:13px">${esc(author(x))} · ${esc(x.time)}${addBtn(x)}</div><p style="white-space:pre-wrap">${esc(x.text)}</p>
+        ${(x.replies || []).slice(0, 2).map(r => `<div class="mcm"><b>${esc(author(r))}</b>${addBtn(r)}:${esc(r.text)}</div>`).join('')}
+        <div class="more" style="display:none">${(x.replies || []).slice(2).map(r => `<div class="mcm"><b>${esc(author(r))}</b>${addBtn(r)}:${esc(r.text)}</div>`).join('')}</div>
         ${(x.replies || []).length > 2 ? `<button class="btn ghost" data-more style="margin:6px 6px 0 0">点开查看(${x.replies.length - 2})</button>` : ''}<button class="btn ghost" data-rp style="margin-top:6px">跟帖</button></div>`).join('') : '<p class="tip">还没有帖子。点“刷新帖子”看看大家在聊什么,或者自己发一个。</p>'}</div>`,
     mount(el) {
       el.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { stack[stack.length - 1].p = { board: b.dataset.b }; render(); });
       q(el, '#np').onclick = () => go('forumnew', { board: bd });
+      el.querySelectorAll('[data-addc]').forEach(b => b.onclick = () => { const id = b.dataset.addc; if (addContact(id)) { toast('已把' + idToName(id) + '加为联系人(聊天、电话、陪伴里都能找到)'); render(); } });
       el.querySelectorAll('[data-more]').forEach(b => b.onclick = () => { const m = b.parentNode.querySelector('.more'); const open = m.style.display === 'none'; m.style.display = open ? 'block' : 'none'; b.textContent = open ? '收起' : '点开查看'; });
       el.querySelectorAll('[data-rp]').forEach(b => b.onclick = () => {
         const pid = b.closest('.post').dataset.pid;
@@ -184,9 +187,9 @@ SCREENS.forum = p => {
       });
       q(el, '#rf').onclick = async () => {
         if (!aiOk()) return; const b = q(el, '#rf'); b.disabled = true; b.textContent = '刷新中…';
-        const pool = CHARACTERS.filter(c => c.role === 'student' && c.postLikely > 0 && (bd === 'school' || c.house === S.house));
+        const pool = availChars().filter(c => c.role === 'student' && c.postLikely > 0 && (bd === 'school' || c.house === S.house));
         const posters = pool.filter(c => Math.random() < c.postLikely + 0.2);
-        const commenters = CHARACTERS.filter(c => c.role === 'student' && (bd === 'school' || c.house === S.house));
+        const commenters = availChars().filter(c => c.role === 'student' && (bd === 'school' || c.house === S.house));
         try {
           if (!posters.length) { toast('今天论坛有点冷清'); } else {
             const j = await AI.json(S.api, `你在为哈利·波特同人手机的${bd === 'house' ? HOUSES[S.house].name + '学院' : '全校'}论坛生成帖子。每位发帖人按人设发 1 个帖子(标题 + 内容 20~80 字),并为每个帖子生成 1~3 条其他人的跟帖(跟帖人只能来自可跟帖名单,可以是匿名)。性格不爱发帖的人不要发。
@@ -213,7 +216,7 @@ SCREENS.forumnew = p => ({
       (S.forum[key] = S.forum[key] || []).push(post); save(); back();
       if (!S.api.key) return;
       try {
-        const cs = CHARACTERS.filter(c => c.role === 'student' && (p.board === 'school' || c.house === S.house)).sort(() => Math.random() - 0.5).slice(0, 3);
+        const cs = availChars().filter(c => c.role === 'student' && (p.board === 'school' || c.house === S.house)).sort(() => Math.random() - 0.5).slice(0, 3);
         const j = await AI.json(S.api, `论坛里有人发了帖,请 1~3 位同学按人设跟帖(10~40 字,可以是匿名,可以只在评论里吐槽)。${post.anon ? '发帖人是匿名的,大家不知道是谁。' : '发帖人是' + S.card.name + '。'}\n可跟帖:\n${cs.map(c => `${c.id}(${c.name}):${c.persona}`).join('\n')}\n格式:{"replies":[{"id":"角色id","anon":false,"text":""}]}`, ti + '\n' + tx);
         post.replies = (j.replies || []).filter(r => charById(r.id) && r.text).map(r => ({ author: r.id, anon: !!r.anon, text: r.text, time: '刚刚' })); save(); toast('你的帖子有人回复了');
       } catch (e) { /* 静默 */ }
@@ -250,7 +253,7 @@ SCREENS.music = () => ({
 
 /* ===== 陪伴 ===== */
 SCREENS.companion = () => ({
-  html: header('陪伴') + `<div class="scroll"><p class="soft">选一位角色,安静地待一会儿。可以点一点他,或者说点什么。</p>${CHARACTERS.map(c => `<button class="row" data-id="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b></span></button>`).join('')}</div>`,
+  html: header('陪伴') + `<div class="scroll"><p class="soft">选一位角色,安静地待一会儿。可以点一点他,或者说点什么。</p>${contactList().map(c => `<button class="row" data-id="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b></span></button>`).join('')}</div>`,
   mount(el) { el.querySelectorAll('.row').forEach(b => b.onclick = () => { primeSpeech(); go('companionroom', { id: b.dataset.id }); }); }
 });
 SCREENS.companionroom = p => {
@@ -302,7 +305,7 @@ SCREENS.theaternew = () => ({
   html: header('新剧本') + `<div class="scroll"><label class="field"><span>剧本名</span><input id="ti"></label>
     <label class="field"><span>设定 / 背景(AI 会严格按它来写)</span><textarea id="se" style="min-height:140px" placeholder="例如:战后第三年,霍格沃茨重新开学,密室里传出新的动静……"></textarea></label>
     <label class="field"><span>我扮演的角色</span><input id="ro" value="${esc(S.card.name || '')}" placeholder="默认使用我的角色卡"></label>
-    <p class="soft">参演角色</p>${CHARACTERS.map(c => `<label class="row"><input type="checkbox" value="${c.id}" style="width:22px;height:22px">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b></span></label>`).join('')}
+    <p class="soft">参演角色</p>${contactList().map(c => `<label class="row"><input type="checkbox" value="${c.id}" style="width:22px;height:22px">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b></span></label>`).join('')}
     <label class="field"><span>长度</span><select id="ln"><option value="short">短剧场(约 8 幕)</option><option value="long">长剧场(约 20 幕)</option></select></label><button class="btn big" id="ok">开演</button></div>`,
   mount(el) {
     q(el, '#ok').onclick = () => {

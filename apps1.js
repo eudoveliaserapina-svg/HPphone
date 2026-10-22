@@ -11,7 +11,7 @@ function coinText(k) {
 }
 function priceText(k) { return k >= KNUT_PER_GALLEON ? (k / KNUT_PER_GALLEON).toFixed(1).replace('.0', '') + ' 金加隆' : k >= KNUT_PER_SICKLE ? Math.round(k / KNUT_PER_SICKLE) + ' 银西可' : k + ' 纳特'; }
 function addCoins(k) { S.coins = Math.max(0, S.coins + k); save(); }
-const gradeNum = () => +S.card.grade || 1;
+const gradeNum = () => (typeof curGrade === 'function' ? curGrade() : (+S.card.grade || 1));   /* 玩家当前年级:随游戏里的学年增长 */
 const aiOk = () => { if (!S.api.key) { toast('还没有填写 API Key'); return false; } return true; };
 const idToName = id => (charById(id) || { name: id }).name;
 function nudge(c, key, v) {  /* 本地直接调整关系值(购物、兼职等用) */
@@ -79,7 +79,7 @@ SCREENS.chat = p => {
   const tabs = `<div class="tabs">${CHAT_TABS.map(t => `<button class="${t[0] === tab ? 'on' : ''}" data-tab="${t[0]}">${t[1]}</button>`).join('')}</div>`;
   let body = '';
   if (tab === 'dm') {
-    const list = CHARACTERS.slice().sort((a, b) => (S.fav[b.id] ? 1 : 0) - (S.fav[a.id] ? 1 : 0));
+    const list = contactList().sort((a, b) => (S.fav[b.id] ? 1 : 0) - (S.fav[a.id] ? 1 : 0));
     body = list.map(c => {
       const r = rel(c.id); const h = S.chats[c.id] || []; const last = [...h].reverse().find(m => m.r !== 'note');
       const sub = c.role === 'staff' ? c.title : HOUSES[c.house].name + ' | 学生';
@@ -115,7 +115,7 @@ SCREENS.chat = p => {
       const rf = q(el, '#refm'); if (rf) rf.onclick = async () => {
         if (!aiOk()) return; rf.disabled = true; rf.textContent = '刷新中…';
         try {
-          const pool = CHARACTERS.filter(c => c.role === 'student' || Math.random() < 0.3).sort(() => Math.random() - 0.5).slice(0, 2);
+          const pool = contactList().filter(c => c.role === 'student' || Math.random() < 0.3).sort(() => Math.random() - 0.5).slice(0, 2);
           const j = await AI.json(S.api, '你要为哈利·波特同人手机的朋友圈生成动态。每个角色发一条符合人设的短动态(10 到 40 字),贴近当下的校园生活。格式:{"posts":[{"id":"角色id","text":"内容"}]}',
             '角色:\n' + pool.map(c => `${c.id}(${c.name}):${c.persona}`).join('\n'));
           (j.posts || []).forEach(x => { if (charById(x.id) && x.text) S.moments.push({ author: x.id, text: x.text, time: World.now().toLocaleString('zh-CN', { hour12: false }).slice(5, 16), likes: [], comments: [] }); });
@@ -128,7 +128,7 @@ SCREENS.chat = p => {
 
 SCREENS.groupnew = () => ({
   html: header('新建群聊') + `<div class="scroll"><label class="field"><span>群名</span><input id="gn" placeholder="比如:深夜八卦小分队"></label>
-    <p class="soft">选择成员(至少 2 位)</p>${CHARACTERS.map(c => `<label class="row"><input type="checkbox" value="${c.id}" style="width:22px;height:22px">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b></span></label>`).join('')}
+    <p class="soft">选择成员(至少 2 位)</p>${contactList().map(c => `<label class="row"><input type="checkbox" value="${c.id}" style="width:22px;height:22px">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b></span></label>`).join('')}
     <button class="btn big" id="ok">创建</button></div>`,
   mount(el) {
     q(el, '#ok').onclick = () => {
@@ -156,7 +156,8 @@ SCREENS.groupchat = p => {
 成员及人设:\n${mem.map(c => `${c.id}(${c.name}):${c.persona}`).join('\n')}
 各成员当前与玩家关系:${mem.map(c => `${c.name}亲密度${rel(c.id).intimacy}/信任度${rel(c.id).trust}`).join(';')}
 ${playerCtx()}
-${crossMemoryMulti(mem, 'group', { skipGroup: g.id })}
+${(mm => mm ? '成员记得的近况(只有和玩家这句话直接相关时才用,无关就完全忽略):\n' + mm : '')(crossMemoryMulti(mem, 'group', { skipGroup: g.id }))}
+${gapLines(mem) ? '时间提示:' + gapLines(mem) + '。聊天记录是那时候的内容,成员要意识到时间已经过去。' : ''}
 让 1 到 3 位最合适的成员回复,每条 1 到 2 句,像群聊,可以互相接话。
 关系变化 changes 默认必须是空数组 []。只有玩家这句话真的触动了某位成员(明显让他开心、感动、被冒犯或被冷落)时,才给那一位成员 ±1 到 3 的变化,一次最多 1 位;普通闲聊、寒暄、玩笑一律不给变化。教职工 intimacy 必须为 0。
 格式:{"messages":[{"from":"角色id","text":"内容"}],"changes":[{"id":"角色id","intimacy":0,"trust":0}]}`,
@@ -166,7 +167,7 @@ ${crossMemoryMulti(mem, 'group', { skipGroup: g.id })}
           const ch = (j.changes || []).filter(x => charById(x.id) && (+x.intimacy || +x.trust)).slice(0, 1);
           const said = new Set((j.messages || []).map(x => x.from));
           ch.forEach(x => applyDelta(charById(x.id), x)); said.forEach(id => { if (charById(id) && !ch.some(x => x.id === id)) applyDelta(charById(id), {}); });
-          save(); down();
+          markTalk(g.members); save(); down();
         } catch (err) { const ty = q(el, '#typing'); if (ty) ty.remove(); toast(err.message); }
         busy = false;
       };
@@ -183,7 +184,7 @@ SCREENS.momentnew = () => ({
       S.moments.push(m); save(); toast('已发布'); back();
       if (!S.api.key) return;
       try {
-        const pool = CHARACTERS.slice().sort(() => Math.random() - 0.5).slice(0, 3);
+        const pool = contactList().slice().sort(() => Math.random() - 0.5).slice(0, 3);
         const j = await AI.json(S.api, `玩家(${S.card.name})发了一条朋友圈。请让下面的角色按人设和与玩家的关系决定是否点赞、评论(评论 5 到 25 字)。
 ${pool.map(c => `${c.id}(${c.name}):${c.persona};亲密度${rel(c.id).intimacy}/信任度${rel(c.id).trust}`).join('\n')}
 同时评估关系变化(-5~5 的整数,教职工 intimacy 为 0)。格式:{"likes":["角色id"],"comments":[{"from":"角色id","text":"内容"}],"changes":[{"id":"角色id","intimacy":0,"trust":0}]}`, text);
@@ -323,7 +324,7 @@ function todayTodos() {
   if (!S.todos[k]) {
     const r = rng(k + 'todo'), subs = DAY_PLAN[World.now().getDay()].map(x => x[1]).filter(x => SUBJECTS.includes(x)); const list = [];
     (subs.length ? subs.slice(0, 2) : [pick(SUBJECTS, r)]).forEach(s => list.push({ t: pick(['完成{c}的作业', '复习{c}的笔记', '预习{c}的下一章'], r).replace('{c}', s), done: false }));
-    const c = CHARACTERS[Math.floor(r() * CHARACTERS.length)];
+    const cl = contactList().length ? contactList() : CHARACTERS, c = cl[Math.floor(r() * cl.length)];
     list.push({ t: `和${c.name}的约定:傍晚在${pick(LOCATIONS, r).name}见面`, done: false });
     if (r() < 0.14) { const boss = pick(JOBS.filter(j => !j.grey && j.place === '城堡'), r); list.push({ t: `临时委托:${boss.boss}需要人手(${boss.desc})`, done: false, reward: 87 }); }
     S.todos[k] = list; save();
@@ -383,7 +384,7 @@ SCREENS.shop = p => {
       el.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { const i = ITEMS.find(x => x.id === b.dataset.buy); if (S.coins < i.price) return toast('钱不够'); addCoins(-i.price); S.inv[i.id] = (S.inv[i.id] || 0) + 1; save(); toast('已放入仓库:' + i.name); render(); });
       el.querySelectorAll('[data-give]').forEach(b => b.onclick = () => {
         const i = ITEMS.find(x => x.id === b.dataset.give);
-        const m = modalOpen(`<h3>把 ${i.emoji}${i.name} 送给谁?</h3>${CHARACTERS.map(c => `<button class="row" data-to="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b></span></button>`).join('')}`);
+        const m = modalOpen(`<h3>把 ${i.emoji}${i.name} 送给谁?</h3>${contactList().map(c => `<button class="row" data-to="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b></span></button>`).join('')}`);
         m.querySelectorAll('[data-to]').forEach(t => t.onclick = async () => {
           const c = charById(t.dataset.to); m.remove(); S.inv[i.id]--; save();
           const like = c.likes.includes(i.cat), dis = c.dislikes.includes(i.cat);

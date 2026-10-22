@@ -106,7 +106,7 @@ const PERSONA = (() => {
     'dumbledore|snape': '秘密合作伙伴,彼此信任并依赖对方执行艰难任务。'
   };
 
-  const grade = () => { const n = World.now(); return Math.max(1, (n.getMonth() >= 8 ? n.getFullYear() : n.getFullYear() - 1) - 1990); };
+  const grade = () => curGrade();     /* 和玩家的年级同步 */
   function stage(id) {
     const p = P[id]; if (!p) return '';
     let cur = ''; p.stages.forEach(s => { if (s[0] <= grade()) cur = s[1]; });

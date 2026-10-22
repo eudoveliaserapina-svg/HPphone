@@ -31,7 +31,7 @@ const PLACES = (() => {
   /* 玩家当前年级:角色卡上的年级 + 游戏里经过的学年数 */
   function grade() {
     const d = World.now(), Y = d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
-    return Math.max(1, Math.min(7, gradeNum() + (Y - (S.world ? S.world.year0 : Y))));
+    return curGrade();
   }
   /* 姓氏:「克莱尔·沙菲特」→ 沙菲特;「林夏」→ 林(单字姓后面加“家”) */
   function surname() {
@@ -177,6 +177,26 @@ sceneFallbackBg = function (locId) {
     for (let r = 0; r < 4; r++) for (let i = 0; i < 12; i++) sh += `<rect x="${i * 14 + 6}" y="${60 + r * 90}" width="10" height="${42 + rnd(r * 12 + i) * 22}" fill="hsl(${15 + Math.floor(rnd(i + r * 5) * 30)},35%,${20 + Math.floor(rnd(i + r) * 14)}%)"/>`;
     defs = g('a', '#2a1b12', '#4b3321') + gl('f', '#ff9d4a');
     body = `<rect width="390" height="844" fill="url(#a)"/>${sh}<rect x="220" y="360" width="150" height="150" fill="#1a110b"/><circle cx="295" cy="470" r="110" fill="url(#f)" opacity=".75"/><path d="M270 510 q25 -60 50 0Z" fill="#ff8a2a"/><rect x="30" y="600" width="250" height="24" fill="#6b4a2d"/><rect x="50" y="624" width="16" height="140" fill="#4a3220"/><rect x="244" y="624" width="16" height="140" fill="#4a3220"/><rect y="760" width="390" height="84" fill="#1d130d"/>`;
+  } else if (kind === 'train') {
+    let seats = '';
+    for (let i = 0; i < 2; i++) seats += `<rect x="${i * 250 + 10}" y="560" width="130" height="170" rx="14" fill="#8a2f2f"/><rect x="${i * 250 + 10}" y="520" width="130" height="50" rx="14" fill="#a33b3b"/>`;
+    defs = g('a', '#3a2a24', '#5a4034') + g('s', '#9ac8f0', '#e6f3d8') + g('h', '#6aaa5a', '#3a7a3a');
+    body = `<rect width="390" height="844" fill="url(#a)"/><rect x="60" y="120" width="270" height="300" rx="14" fill="url(#s)"/><path d="M60 330 Q130 270 200 320 T330 300 V420 H60Z" fill="url(#h)"/><rect x="60" y="120" width="270" height="300" rx="14" fill="none" stroke="#2a1d16" stroke-width="10"/><path d="M195 120 V420" stroke="#2a1d16" stroke-width="6"/>${seats}<rect y="740" width="390" height="104" fill="#2a1d16"/>`;
+  } else if (kind === 'corridor') {
+    let tc = '';
+    [[60, 300], [330, 300], [95, 420], [295, 420]].forEach(p => { tc += `<circle cx="${p[0]}" cy="${p[1]}" r="46" fill="url(#f)"/><rect x="${p[0] - 3}" y="${p[1]}" width="6" height="26" fill="#4a3220"/><ellipse cx="${p[0]}" cy="${p[1] - 4}" rx="6" ry="11" fill="#ffb347"/>`; });
+    defs = g('a', '#1a1a24', '#3a3a48') + gl('f', '#ffb347');
+    body = `<rect width="390" height="844" fill="url(#a)"/><path d="M0 0 L120 250 V560 L0 844Z M390 0 L270 250 V560 L390 844Z" fill="#2a2a36"/><path d="M120 250 H270 V560 H120Z" fill="#101018"/><path d="M0 700 L120 560 H270 L390 700 V844 H0Z" fill="#26222a"/><path d="M60 140 Q195 20 330 140" stroke="#44445a" stroke-width="10" fill="none"/>${tc}`;
+  } else if (kind === 'forest') {
+    let tr = '';
+    for (let i = 0; i < 12; i++) { const x = i * 36 - 10, h = 420 + rnd(i) * 300; tr += `<rect x="${x}" y="${844 - h}" width="${16 + rnd(i + 4) * 16}" height="${h}" fill="hsl(${130 + Math.floor(rnd(i) * 20)},25%,${8 + Math.floor(rnd(i + 2) * 8)}%)"/>`; }
+    defs = g('a', '#0b1a14', '#1d3a2a') + gl('m', '#cfe8ff');
+    body = `<rect width="390" height="844" fill="url(#a)"/><circle cx="290" cy="120" r="110" fill="url(#m)" opacity=".5"/>${tr}<path d="M0 700 Q200 660 390 710 V844 H0Z" fill="#0a120e"/><path d="M150 760 Q175 700 200 740" stroke="#cfe8ff" stroke-width="3" fill="none" opacity=".6"/>`;
+  } else if (kind === 'hospital') {
+    let beds = '';
+    for (let i = 0; i < 3; i++) beds += `<rect x="${30 + i * 120}" y="540" width="100" height="150" rx="10" fill="#f4f6f8"/><rect x="${30 + i * 120}" y="520" width="100" height="40" rx="10" fill="#dfe6ee"/><rect x="${30 + i * 120}" y="640" width="100" height="14" fill="#b8c4d0"/>`;
+    defs = g('a', '#e8eef4', '#c3cfdb') + gl('l', '#fff7d6');
+    body = `<rect width="390" height="844" fill="url(#a)"/><rect x="40" y="110" width="110" height="200" rx="50" fill="#a9c8ea"/><rect x="240" y="110" width="110" height="200" rx="50" fill="#a9c8ea"/><circle cx="195" cy="200" r="150" fill="url(#l)" opacity=".7"/>${beds}<rect y="700" width="390" height="144" fill="#9aa8b6"/>`;
   } else {   /* bedroom */
     defs = g('a', '#3a3350', '#6a5f82') + g('s', '#8fb4e8', '#dbe8f8') + gl('l', '#ffe3a0');
     body = `<rect width="390" height="844" fill="url(#a)"/><rect x="230" y="110" width="120" height="190" rx="50" fill="url(#s)"/><rect x="230" y="110" width="120" height="190" rx="50" fill="none" stroke="#2a2118" stroke-width="7"/><rect x="30" y="540" width="250" height="110" rx="12" fill="${ac}"/><rect x="30" y="500" width="70" height="60" rx="10" fill="#fff" opacity=".85"/><rect y="650" width="390" height="194" fill="#3b2f2a"/><rect x="300" y="500" width="70" height="150" fill="#5a4129"/><circle cx="335" cy="470" r="60" fill="url(#l)"/>`;
@@ -195,13 +215,19 @@ SCREENS.map = () => {
   const tabs = PLACES.AREAS.map(a => { const st = PLACES.areaStatus(a.id); return `<button class="area-tab ${a.id === cur ? 'on' : ''} ${st.ok ? '' : 'lock'}" data-area="${a.id}">${st.ok ? '' : '🔒 '}${esc(a.name())}</button>`; }).join('');
   const locked = PLACES.AREAS.filter(a => !PLACES.areaStatus(a.id).ok).map(a => `<div>🔒 ${esc(a.name())}:${esc(PLACES.areaStatus(a.id).why)}</div>`).join('');
   const nodes = LOCATIONS.filter(l => l.area === cur).map(l => `<g class="node" data-loc="${l.id}"><circle cx="${l.x}" cy="${l.y}" r="5.2" fill="${vis.some(v => v.id === l.id) ? 'var(--today)' : 'var(--t0)'}" stroke="var(--glyph)" stroke-width="1"/><text x="${l.x}" y="${l.y + 1.6}" text-anchor="middle" font-size="5" fill="var(--glyph)">${vis.some(v => v.id === l.id) ? '✓' : (l.id === 'gringotts' ? '$' : '·')}</text><text x="${l.x}" y="${l.y + 10.5}" text-anchor="middle" font-size="4.2" fill="var(--ink)">${esc(l.name)}</text></g>`).join('');
+  /* 主线剧情:到了原著里的日期,按顺序一章一章开放 */
+  const ss = typeof STORY !== 'undefined' ? STORY.status() : { state: 'none' };
+  const banner = ss.state === 'ready' || ss.state === 'inprogress'
+    ? `<div class="card story-card"><b>📖 主线剧情</b><div style="font-size:16px;margin:4px 0">${esc(ss.ch.title)} <small class="soft">${esc(ss.ch.place)}</small></div><p class="soft" style="margin:0 0 8px">${esc(ss.ch.intro)}</p><button class="btn big" id="story-go" style="margin:0">${ss.state === 'inprogress' ? '继续' : '开始'}</button></div>`
+    : ss.state === 'waiting' ? `<p class="soft">📖 下一章主线:${esc(ss.ch.title)}(${ss.ch.m}月${ss.ch.d}日解锁)</p>` : '';
   const note = slot < 0 ? area.night : `现在是「${SLOTS[slot][1]}」时段。点一个地点看看有谁在。每天都会刷新。`;
   return {
-    html: header('地图') + `<div class="area-tabs">${tabs}</div><div class="scroll"><p class="soft">📅 星期${WEEK[d.getDay()]}${PLACES.weekend(d) ? '(周末)' : ''}${hol ? ' · ' + hol : ''}<br>${esc(note)}</p>
+    html: header('地图') + `<div class="area-tabs">${tabs}</div><div class="scroll">${banner}<p class="soft">📅 星期${WEEK[d.getDay()]}${PLACES.weekend(d) ? '(周末)' : ''}${hol ? ' · ' + hol : ''}<br>${esc(note)}</p>
       <svg viewBox="0 0 100 110" class="mapsvg"><path d="${area.shape}" fill="var(--surface2)" stroke="var(--line)" stroke-width="1.2" fill-rule="evenodd"/>${nodes}</svg>
       ${locked ? `<div class="soft area-why">${locked}</div>` : ''}
       <div class="card"><h3>今天去过的地方</h3>${vis.length ? vis.map(v => `<div>${esc(v.time)} · ${esc(v.name)}</div>`).join('') : '<span class="soft">还没有去过任何地方。角色们会注意到你去了哪里。</span>'}</div></div>`,
     mount(el) {
+      const sg = q(el, '#story-go'); if (sg) sg.onclick = () => go('story', { id: ss.ch.id });
       el.querySelectorAll('.area-tab').forEach(b => b.onclick = () => {
         const st = PLACES.areaStatus(b.dataset.area);
         if (!st.ok) return toast(st.why);
@@ -210,7 +236,7 @@ SCREENS.map = () => {
       el.querySelectorAll('.node').forEach(n => n.onclick = () => {
         const l = LOCATIONS.find(x => x.id === n.dataset.loc);
         const who = slot < 0 ? [] : sceneCast(l.id, slot);
-        const m = modalOpen(`<h3>${esc(l.name)}</h3>${who.length ? who.map(c => `<div class="row" data-who="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b><small>${pick(l.acts, rng(dkey() + c.id + slot + 'a'))}</small></span></div>`).join('') : '<p class="soft">这里现在没有人。</p>'}
+        const m = modalOpen(`<h3>${esc(l.name)}</h3>${who.length ? who.map(c => `<div class="row" data-who="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b><small>${actFor(c, l, slot)}</small></span></div>`).join('') : '<p class="soft">这里现在没有人。</p>'}
           ${slot < 0 ? `<p class="soft" style="font-size:12px;margin:2px 0 8px">${esc(PLACES.nightHint(l))}</p>` : ''}<button class="btn big" id="go">进入</button><button class="btn big ghost" data-close>算了</button>`);
         m.querySelector('[data-close]').onclick = () => m.remove();
         m.querySelectorAll('[data-who]').forEach(r => r.onclick = () => { m.remove(); sceneEnter(l.id); });

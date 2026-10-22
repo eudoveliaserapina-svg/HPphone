@@ -389,7 +389,7 @@ SCREENS.chatroom = p => {
 
 /* --- 电话:选人 --- */
 SCREENS.phone = () => ({
-  html: header('电话') + `<div class="scroll"><p class="soft">一次只能和一个人通话。可以直接打字,角色会用声音回答你。</p>${CHARACTERS.map(c =>
+  html: header('电话') + `<div class="scroll"><p class="soft">一次只能和一个人通话。可以直接打字,角色会用声音回答你。</p>${contactList().map(c =>
     `<button class="row" data-id="${c.id}">${avatar(c)}<span class="grow"><b>${esc(c.name)}</b><small>点击拨打</small></span><span style="font-size:24px">📞</span></button>`).join('')}</div>`,
   mount(el) { el.querySelectorAll('.row').forEach(b => b.onclick = () => { primeSpeech(); go('call', { id: b.dataset.id }); }); }
 });

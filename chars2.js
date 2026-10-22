@@ -1,5 +1,6 @@
 /* 新增角色:来自《主要角色 AI 人设卡》的另外 7 位。
-   学生(哈利、罗恩、金妮、纳威)有亲密度和信任度;其余(邓布利多、小天狼星、伏地魔)和教职工一样只有信任度。
+   学生(哈利、罗恩、金妮、纳威)有亲密度和信任度;其余(邓布利多、小天狼星)和教职工一样只有信任度。
+   伏地魔不是手机联系人(只会出现在主线剧情里),所以不在这里。
    map:这个角色会出现在哪些地图地点。不写 = 按地图原来的随机规则;[] = 不会出现在城堡的任何地点(只能在手机上联系);['hall'] = 只会出现在大礼堂。
    详细人设在 persona.js 里(按学年变化),这里的 persona 只是兜底。 */
 (function () {
@@ -15,9 +16,7 @@
     { id: 'dumbledore', name: '阿不思·邓布利多', role: 'staff', house: null, title: '霍格沃茨校长', color: '#6a4fa3', pitch: 0.85, rate: 0.9, map: ['hall'],
       persona: '霍格沃茨校长,温和、委婉、爱用幽默和谜语引导对话,喜欢甜食。', extra: { voice: 'charles', postLikely: 0, cheerful: true, likes: ['sweets', 'book'], dislikes: [] } },
     { id: 'sirius', name: '小天狼星·布莱克', role: 'staff', house: null, title: '哈利的教父 | 掠夺者之一', color: '#3a3f4f', pitch: 0.9, rate: 1.0, map: [],
-      persona: '哈利的教父,叛逆、机智、忠诚,熟人面前幽默亲昵。', extra: { voice: 'charles', postLikely: 0, cheerful: true, likes: ['prank', 'sweets'], dislikes: [] } },
-    { id: 'voldemort', name: '伏地魔', role: 'staff', house: null, title: '黑魔王', color: '#1f1f24', pitch: 0.7, rate: 0.85, map: [],
-      persona: '黑巫师,自负、残酷、精于操纵,轻视他人。', extra: { voice: 'charles', postLikely: 0, cheerful: false, likes: [], dislikes: ['sweets', 'prank'] } }
+      persona: '哈利的教父,叛逆、机智、忠诚,熟人面前幽默亲昵。', extra: { voice: 'charles', postLikely: 0, cheerful: true, likes: ['prank', 'sweets'], dislikes: [] } }
   ];
   NEW_CHARS.forEach(n => {
     if (CHARACTERS.some(c => c.id === n.id)) return;              /* 已经有同 id 的角色就不重复加 */

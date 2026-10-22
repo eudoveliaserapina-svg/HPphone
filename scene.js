@@ -24,9 +24,9 @@ const sceneOn = id => !!SCENE_LOCS[id];
 /* 这个地点此刻谁在场。夜里没有人。非开放地点和地图原规则完全一样。 */
 function sceneCast(locId, slot) {
   if (slot < 0) return [];
-  const cfg = SCENE_LOCS[locId];
-  if (cfg && cfg.fixed) return cfg.fixed.map(charById).filter(Boolean);
-  return CHARACTERS.filter(c => (!c.map || c.map.indexOf(locId) >= 0) && whereIs(c, slot) === locId);   /* c.map 限制角色能出现的地点 */
+  const cfg = SCENE_LOCS[locId], ok = c => typeof avail !== 'function' || avail(c);       /* 还没登场(或已经不在)的角色不会出现 */
+  if (cfg && cfg.fixed) return cfg.fixed.map(charById).filter(c => c && ok(c));
+  return CHARACTERS.filter(c => ok(c) && (!c.map || c.map.indexOf(locId) >= 0) && whereIs(c, slot) === locId);   /* c.map 限制角色能出现的地点 */
 }
 const sceneShort = c => { const p = c.name.split('·'); return c.role === 'staff' ? p[p.length - 1] : p[0]; };
 const sceneRelLine = c => { const r = rel(c.id); return c.role === 'staff' ? `信任度 ${r.trust}/100(教职工没有亲密度)` : `亲密度 ${r.intimacy}/100,信任度 ${r.trust}/100`; };
@@ -63,6 +63,14 @@ function sceneStripAgency(text, name) {
   return sents.filter(s => !head.test(s) && !inner.test(s)).join('').trim();
 }
 
+/* 这个选项是不是要玩家去别的地方 / 离开?剧情只在当前地点里,从进入到离开为止,不能从图书馆的剧情里走进礼堂 */
+function sceneLeaves(t, loc) {
+  t = String(t);
+  if (/离开|出去|去往|前往|走出|回宿舍|回到宿舍|回公共休息室|回去|赶去|赶往|赶到|动身|返回|散步去/.test(t)) return true;
+  const names = LOCATIONS.filter(l => l.id !== loc.id).map(l => l.name).concat(['宿舍', '公共休息室', '礼堂', '教室', '校长室', '医疗翼', '霍格莫德', '对角巷', '城堡外', '操场']);
+  return /[去到往走赶]/.test(t) && names.some(n => t.indexOf(n) >= 0 && loc.name.indexOf(n) < 0);
+}
+
 /* 解析 AI 返回的 JSON。角色只能是在场的人;选项最多 4 个;who 类型的选项必须指向在场角色。
    角色名认得很宽:id、中文名、姓或名、英文名(Draco / Draco Malfoy)都行。 */
 function sceneWho(v, cast) {
@@ -90,7 +98,7 @@ function sceneParse(text, cast) {
     if (k !== 'who' && k !== 'talk') k = 'self';
     cs.push({ t, k, who: w });
   });
-  return { lines, cs: cs.slice(0, 4), rel: raw.rel && typeof raw.rel === 'object' ? raw.rel : {}, allow: raw.allow_others === true, topic: String(raw.topic || '').trim().slice(0, 12) };
+  return { lines, cs: cs.slice(0, 4), rel: raw.rel && typeof raw.rel === 'object' ? raw.rel : {}, allow: raw.allow_others === true, topic: String(raw.topic || '').trim().slice(0, 12), progress: String(raw.progress || '').trim() };
 }
 
 /* 节奏控制。开场只有旁白;去找谁就只有谁说话(其他人除非 AI 标了“必要”,最多插一句);
@@ -156,6 +164,8 @@ function sceneSystem(loc, cfg, cast, slot, focus, talk) {
     playerCtx(),
     '在场角色(只有他们可以说话和行动):\n' + castTxt,
     pairs.length ? '在场角色之间的关系:\n' + pairs.join('\n') : '',
+    typeof timelineGuard === 'function' ? timelineGuard() : '',
+    typeof gapLines === 'function' && gapLines(cast) ? '时间提示(聊天记录是那时候的内容,角色要意识到时间已经过去):' + gapLines(cast) + '。' : '',
     mem ? '在场角色记得的近况(来自群聊、私聊、别处的日常剧情;只有和当前话题直接相关时才用,无关就完全忽略,不要逐条复述):\n' + mem : '',
     focus && charById(focus) ? `当前交谈对象:${charById(focus).name}(id:${focus})。这一轮只写他/她和玩家之间的互动。` : '',
     talk && talk.topics.length ? `这段交谈已经聊过的话题:${talk.topics.join('、')}。不要再回到这些话题,每一轮都要换新的话头(可以从对方的另一面入手:家人、功课、别的人、眼前正在发生的事、对玩家的态度)。` : '',
@@ -179,6 +189,7 @@ function sceneSystem(loc, cfg, cast, slot, focus, talk) {
     '5. 玩家是学生,互动保持适龄、非露骨,不写亲密的身体接触。',
     '6. 角色的话必须直接回应玩家刚选的那句话或动作(哪怕是嘴硬、反问、挖苦地回应),不能自说自话,也不能无视对方。角色的爱好和标志性话题(比如魁地奇)在一段交谈里最多提一次。',
     '7. 在“去找某位角色(who)”和“继续交谈(talk)”的轮次,lines 里必须有至少一条这位角色说的话(who 填角色 id,例如 draco,不要填名字);旁白只写一条,不超过 40 字,不要只有动作和神态。',
+    '9. 这场剧情只发生在「' + loc.name + '」里,从玩家进入到离开为止:旁白和选项都不要让玩家去别的地方(比如去礼堂吃饭、回宿舍、去图书馆),也不要写玩家离开;想离开时玩家会自己点“离开这里”。\n    10. 分清身份:教师(教职工)是老师,不会被要求重做作业、被扣分、被罚抄,这些只有学生才会遇到;不要把学生的遭遇写到教师身上。',
     '8. rel:只有玩家上一步真的触动了某位角色,才给出变化(整数,一般 1~3,极少数 5,可以为负);普通寒暄和开场一律为空。教职工只有 trust。',
     '只输出一个 JSON,不要代码块:{"lines":[{"who":"","text":"旁白"},{"who":"角色id","text":"这位角色说的话"}],"choices":[{"text":"选项","kind":"who|talk|self","who":"kind 为 who 时填角色id"}],"allow_others":false,"topic":"本轮话题,不超过 8 个字","rel":{"角色id":{"intimacy":0,"trust":0}}}'
   ].filter(Boolean).join('\n');
@@ -330,8 +341,9 @@ SCREENS.scene = p => {
       function showChoices() {
         const cs = sc.cur.cs;
         vn.classList.add('choosing'); nx.style.visibility = 'hidden';
-        chs.innerHTML = cs.map((c, i) => `<button class="vn-opt" data-i="${i}">${esc(c.t)}</button>`).join('');
-        chs.querySelectorAll('.vn-opt').forEach(b => b.onclick = e => { e.stopPropagation(); const c = cs[+b.dataset.i]; vn.classList.remove('choosing'); chs.innerHTML = ''; step(c.t, c); });
+        chs.innerHTML = cs.map((c, i) => `<button class="vn-opt" data-i="${i}">${esc(c.t)}</button>`).join('') + `<button class="vn-opt leave" id="vleave">离开${esc(loc.name)}</button>`;
+        q(chs, '#vleave').onclick = e => { e.stopPropagation(); sc.log.push({ k: 'd', t: '离开了' + loc.name }); save(); back(); };
+        chs.querySelectorAll('.vn-opt[data-i]').forEach(b => b.onclick = e => { e.stopPropagation(); const c = cs[+b.dataset.i]; vn.classList.remove('choosing'); chs.innerHTML = ''; step(c.t, c); });
       }
       function waiting(on) { nm.style.display = 'none'; box.className = 'vn-box narr'; if (on) { clearTimeout(tmr); typing = false; tx.textContent = '……'; nx.style.visibility = 'hidden'; } }
 
@@ -360,6 +372,7 @@ SCREENS.scene = p => {
             if (!why) break;                       /* 第二次还不合格也照用,不再卡住玩家 */
           }
           if (!r.lines.length) throw new Error('AI 没有返回可用的内容,再试一次');
+          r.cs = r.cs.filter(c => !sceneLeaves(c.t, loc));          /* 选项不能把玩家带去别的地点 */
           /* 交谈到第 3 次来回就该收尾:不再给“继续聊”的选项 */
           if (talk && talk.n >= 3) {
             r.cs = r.cs.filter(c => c.k !== 'talk');
@@ -374,6 +387,10 @@ SCREENS.scene = p => {
           sc.cur = { lines: r.lines, cs: r.cs, li: 0 }; sc.focus = focus;
           sc.talk = talk ? { who: focus, n: talk.n, topics: talk.topics.concat(r.topic ? [r.topic] : []).slice(-6) } : null;
           if (userText) Object.keys(r.rel).forEach(id => { const c = charById(id); if (c && sc.cast.indexOf(id) >= 0) applyDelta(c, r.rel[id]); });
+          /* 和老师说上话,就互相留下联系方式(学生要去论坛加);并记下这次联系的游戏日期 */
+          const fc = focus && charById(focus);
+          if (fc && fc.role === 'staff' && typeof addContact === 'function' && addContact(focus)) toast('你和' + fc.name.split('·').pop() + '互相留下了联系方式');
+          if (typeof markTalk === 'function') markTalk(focus ? [focus] : r.lines.filter(l => l.who).map(l => l.who));
           save(); busy = false; showLine();
         } catch (e) {
           rollback(); save(); busy = false;
